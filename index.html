@@ -673,7 +673,7 @@ function money(s){ if(!s)return""; var n=String(s).replace(/[^\d.]/g,""); if(!n)
 function fichaClient(p,skipInteres){
   function L(a,b){return (b&&String(b).trim())?(a+': '+b):null;}
   var l=[L('🙂 Le gusta que le digan',p.apodo),L('🎂 Edad',p.edad),L('📆 Nacimiento',p.nacimiento),L('⚧ Género',p.genero),
-    L('📍 Residencia',p.residencia),(skipInteres?null:L('⭐ Procedimiento(s) de interés',p.interes)),L('🤝 Referido por',p.referido),
+    L('📍 Residencia',p.residencia),L('🤝 Referido por',p.referido),
     L('👩‍💼 Asesor',p.asesor),L('🏷️ Categoría',p.categoria),L('😊 Satisfacción',p.satisfaccion),L('🗒️ Notas del expediente',p.comentarios)].filter(Boolean);
   return l.length?('\n\n——— Ficha del paciente (altapacientes) ———\n'+l.join('\n')):'';
 }
@@ -731,7 +731,7 @@ function renderBoard(rows){
       '<td class="nowrap">'+esc(r.horaIni)+'–'+esc(r.horaFin)+'</td>'+
       '<td><b>'+esc(r.paciente||'—')+'</b>'+(r.telefono?('<div class="sub">'+esc(r.telefono)+'</div>'):'')+'</td>'+
       '<td><span class="lchip '+(lc[r.linea]||'')+'">'+esc(r.linea)+'</span></td>'+
-      '<td>'+esc(r.descripcion||'—')+'</td>'+
+      '<td>'+esc(r.descripcion||'—')+(r.autorizo?('<div class="sub" style="color:var(--warn);font-weight:600">⚠️ Empalme · autorizó: '+esc(r.autorizo)+'</div>'):(r.empalme?'<div class="sub" style="color:var(--warn);font-weight:600">⚠️ Empalme autorizado</div>':''))+'</td>'+
       '<td>'+esc(r.area||'—')+'</td>'+
       '<td>'+esc(r.operativo||'—')+'</td>'+
       '<td>'+statusSelect(i,r.estatus)+'</td>'+
