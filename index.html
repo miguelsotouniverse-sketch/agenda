@@ -492,6 +492,17 @@ function renderForm(){
       if(modf){ modf.addEventListener("change",updConsulta); }
       updConsulta();
     }
+    if(current==="inyectables"){
+      // Retoque de botox → el procedimiento es Botox, fijo (no puede ser otro)
+      var imot=document.getElementById("fld_motivo");
+      var updIny=function(){
+        var retoque=(imot && imot.value==="Retoque de botox");
+        var pf=document.getElementById("fld_procedimiento");
+        if(pf){ if(retoque){ pf.value="Botox"; pf.disabled=true; pf.style.opacity=".7"; } else { pf.disabled=false; pf.style.opacity=""; } }
+      };
+      if(imot){ imot.addEventListener("change",updIny); }
+      updIny();
+    }
     var fch=document.getElementById("fld_fecha"); if(fch) fch.addEventListener("change",loadBooked);
     var cb=document.getElementById("fld_cabina"); if(cb) cb.addEventListener("change",function(){updateRoute();loadBooked();});
   } else {
