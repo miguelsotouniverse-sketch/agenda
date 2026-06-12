@@ -369,17 +369,34 @@ function buildTypes(){
   ];
   // Consulta: médico fijo (solo Dr. Miguel Soto) y sin MSI
   var COMMON_CONSULTA=COMMON;   // consulta: operativo seleccionable (médico titular = Miguel implícito)
+  // Medicina Estética: la atienden las doctoras (operativo limitado)
+  var DOCTORAS_ESTETICA=['Dra. Laura Tagle','Dra. Samantha Contreras'];
+  var COMMON_ESTETICA=COMMON.map(function(x){ return x.k==="medico"
+    ? {k:"medico",l:"Operativo",t:"select",opt:DOCTORAS_ESTETICA,req:true}
+    : x; });
   // Cirugía e Inyectables: siempre presencial
   var COMMON_PRESENCIAL=COMMON.map(function(x){ return x.k==="modalidad"
     ? {k:"modalidad",l:"Modalidad",t:"select",opt:["Presencial"],val:"Presencial",req:true}
     : x; });
   var TAIL_NO_MSI=TAIL.filter(function(x){ return x.k!=="msi"; });
   TYPES={
-    consulta:{label:"Consulta",icon:"🩺",hint:"Primera vez o subsecuente. Agenda del Dr. Soto.",
+    consulta:{label:"Consulta Cirugía Plástica",icon:"🩺",hint:"Primera vez o subsecuente. Agenda del Dr. Soto.",
       cal:function(){return CALLBL.consulta;}, dur:function(f){return f.motivo==="Consulta de primera vez"?60:30;},
       common:COMMON_CONSULTA,
       motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Consulta de primera vez","Consulta subsecuente"],req:true}],
       specific:[
+        {k:"interes",l:"Procedimiento de interés",t:"select",opt:(CAT.procedimientos||[])},
+        {k:"correo",l:"Correo electrónico",t:"text",fromPatient:true},
+        {k:"nacimiento",l:"Fecha de nacimiento",t:"text",fromPatient:true},
+        {k:"residencia",l:"Lugar de residencia",t:"text",fromPatient:true},
+        {k:"fotos",l:"Fotos",t:"select",opt:SINO}
+      ], schedule:SCHEDULE, tail:TAIL_NO_MSI},
+    estetica:{label:"Consulta Medicina Estética",icon:"✨",hint:"Atienden Dra. Tagle / Dra. Contreras. Cabina 1 ó 2.",
+      cal:function(f){return f.cabina==="Cabina 2"?CALLBL.cabina2:CALLBL.cabina1;}, dur:function(f){return f.motivo==="Consulta de primera vez"?60:30;},
+      common:COMMON_ESTETICA,
+      motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Consulta de primera vez","Consulta subsecuente"],req:true}],
+      specific:[
+        {k:"cabina",l:"Cabina",t:"select",opt:["Cabina 1","Cabina 2"],req:true},
         {k:"interes",l:"Procedimiento de interés",t:"select",opt:(CAT.procedimientos||[])},
         {k:"correo",l:"Correo electrónico",t:"text",fromPatient:true},
         {k:"nacimiento",l:"Fecha de nacimiento",t:"text",fromPatient:true},
@@ -473,7 +490,7 @@ function renderForm(){
   formEl.innerHTML=html;
   if(!t.surgery){
     var d=document.getElementById("fld_duracion"); if(d&&!d.value) d.value=t.dur(readForm());
-    if(current==="consulta"){
+    if(current==="consulta"||current==="estetica"){
       var mot=document.getElementById("fld_motivo");
       var modf=document.getElementById("fld_modalidad");
       var updConsulta=function(){
@@ -606,15 +623,17 @@ function buildClientEvents(f){
             {cal:CALLBL.cirugias,sum:sum,when:f.qx_fecha+' '+f.qx_hora+' (Cirugía)',desc:d('Cirugía',cirujano)+fc}];
   }
   var extra=[];
-  if(current==="consulta"){
+  if(current==="consulta"||current==="estetica"){
     var etiqInt=(f.motivo&&f.motivo!=="Consulta de primera vez")?'⚪️ Procedimiento a revisar':'⚪️ Procedimiento de interés';
-    extra=[L(etiqInt,f.interes),L('📧 Correo',p.correo),L('📆 Nacimiento',p.nacimiento),L('📍 Residencia',p.residencia)];
+    if(current==="estetica") extra.push(L('🏠 Cabina',f.cabina));
+    extra=extra.concat([L(etiqInt,f.interes),L('📧 Correo',p.correo),L('📆 Nacimiento',p.nacimiento),L('📍 Residencia',p.residencia)]);
     if(f.modalidad!=="Presencial") extra.push(L('📸 Fotos',f.fotos||'NA'));   // fotos solo en virtual
   }
   if(current==="inyectables") extra=[L('🏠 Cabina',f.cabina),L('⚪️ Procedimiento',f.procedimiento),L('⚫️ Área',f.area),L('😴 Anestesia',f.anestesia||'Local')];
   if(current==="energy") extra=[L('⚪️ Tratamiento',f.tratamiento),L('⚫️ Zona',f.zona),L('😴 Anestesia',f.anestesia)];
+  var titularPrev=(current==="estetica")?(f.medico||'—'):'Dr. Miguel Soto';
   var desc=['🔄 Tipo de paciente: '+(f.tipo_px||'—'),'🩺 Motivo de visita: '+(f.motivo||'—')].concat(extra.filter(Boolean)).concat([
-    '🏥 Médico Titular: Dr. Miguel Soto','👤 Operativo: '+(f.medico||'—'),
+    '🏥 Médico Titular: '+titularPrev,'👤 Operativo: '+(f.medico||'—'),
     '🔘 Modalidad: '+(f.modalidad||'—'),(money(f.costo)?('💵 Costo: '+money(f.costo)):null),(f.msi?('💳 MSI: '+f.msi):null),
     '❗️ Observaciones: '+(f.observaciones||'—'),((f.prospecta&&f.prospecta!=='NA')?('☑️ Prospecta: '+f.prospecta):null),((f.cierra&&f.cierra!=='NA')?('☑️ Cierra: '+f.cierra):null),'☑️ Agenda: '+(CURRENT_AGENDA||'—')].filter(Boolean)).join('\n')+fichaClient(p);
   return [{cal:TYPES[current].cal(f),sum:sum,when:(f.fecha||'?')+' '+(f.hora||'?')+' ('+(f.duracion||'?')+' min)',desc:desc}];
@@ -757,7 +776,7 @@ function loadBoard(){
 function renderBoard(rows){
   var wrap=document.getElementById('boardWrap');
   if(!rows.length){ wrap.innerHTML='<div class="empty">No hay citas programadas ese día.</div>'; document.getElementById('boardStats').innerHTML=''; return; }
-  var lc={'Consulta':'lc-cons','Cirugía':'lc-cir','Cirugía (VPO)':'lc-cir','Anestesia':'lc-anes','Energy Devices':'lc-energy','Inyectables':'lc-iny'};
+  var lc={'Consulta':'lc-cons','Consulta estética':'lc-iny','Cirugía':'lc-cir','Cirugía (VPO)':'lc-cir','Anestesia':'lc-anes','Energy Devices':'lc-energy','Inyectables':'lc-iny'};
   var h='<table class="boardtable"><thead><tr><th>Hora</th><th>Paciente</th><th>Línea de negocio</th><th>Descripción</th><th>Área</th><th>Operativo</th><th>Estatus</th><th>WhatsApp</th></tr></thead><tbody>';
   rows.forEach(function(r,i){
     h+='<tr>'+
