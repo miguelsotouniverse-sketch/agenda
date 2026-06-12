@@ -14,7 +14,1054 @@ var ID_TOKEN = null;
 
 /* Reemplaza google.script.run por fetch a la API (sin tocar el resto del código). */
 function setupShim(){
+  var MAP = {<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Jost:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script>
+/* ===== Config y capa de red: front estático → API de Apps Script ===== */
+var API_URL = "https://script.google.com/macros/s/AKfycbzGs5Cv8Sa9AmpPEM4H65X4LNIieaUha7DhTJXPLFx0PfTBsMzp5h87yZmmw5N6SBmy/exec";
+var OAUTH_CLIENT_ID = "634352012698-b47t3ed3tvd4d1g7l30l68bd6e5s0ri4.apps.googleusercontent.com";
+var ID_TOKEN = null;
+
+/* Reemplaza google.script.run por fetch a la API (sin tocar el resto del código). */
+function setupShim(){
   var MAP = {
+    getBootstrap:      function(){ return {a:'bootstrap', p:{}}; },
+    searchPatients:    function(q){ return {a:'search', p:{query:q}}; },
+    createAppointment: function(p){ return {a:'create', p:p}; },
+    getDaySchedule:    function(ids,date){ return {a:'daySchedule', p:{calIds:ids, date:date}}; },
+    getDayEvents:      function(calId,date){ return {a:'daySchedule', p:{calIds:[calId], date:date}}; },
+    getDayBoard:       function(date){ return {a:'dayBoard', p:{date:date}}; },
+    setStatus:         function(calId,eventId,estatus){ return {a:'setStatus', p:{calId:calId, eventId:eventId, estatus:estatus}}; },
+    findCitas:         function(p){ return {a:'findCitas', p:p}; },
+    cancelCita:        function(p){ return {a:'cancelCita', p:p}; },
+    reschedule:        function(p){ return {a:'reschedule', p:p}; },
+    getCotizaciones:   function(id,nombre){ return {a:'cotizaciones', p:{pacienteId:id, pacienteNombre:nombre}}; }
+  };
+  window.google = window.google || {};
+  window.google.script = window.google.script || {};
+  Object.defineProperty(window.google.script, 'run', { configurable:true, get:function(){
+    var ctx={_s:null,_f:null};
+    ctx.withSuccessHandler=function(f){ctx._s=f;return ctx;};
+    ctx.withFailureHandler=function(f){ctx._f=f;return ctx;};
+    Object.keys(MAP).forEach(function(name){
+      ctx[name]=function(){
+        var spec=MAP[name].apply(null,arguments);
+        fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:spec.a,token:ID_TOKEN,payload:spec.p})})
+          .then(function(r){return r.json();})
+          .then(function(res){
+            if(res&&res.ok===false&&(res.error==='NO_AUTH'||res.error==='NO_AUTORIZADO')){ onAuthError(res); if(ctx._f)ctx._f(new Error(res.mensaje||res.error)); return; }
+            if(ctx._s)ctx._s(res);
+          })
+          .catch(function(err){ if(ctx._f)ctx._f(err); });
+      };
+    });
+    return ctx;
+  }});
+}
+setupShim();
+
+/* Mapa cuenta -> persona (debe coincidir con CONFIG.USERS del backend). Solo para mostrar el nombre. */
+var USERS_FRONT = {
+  'miguelsotomd@gmail.com':'Dr. Miguel Soto','miguelsotoadmi@gmail.com':'Anahi Alvarado',
+  'sotoagenda@gmail.com':'Valeria Lima','renasteventas@gmail.com':'Susana Palacios',
+  'workspacemiguelsoto@gmail.com':'Claudia Falcón'
+};
+var CURRENT_EMAIL='', CURRENT_AGENDA='';
+function parseJwt(t){ try{ return JSON.parse(decodeURIComponent(escape(atob(String(t).split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))))); }catch(e){ return {}; } }
+
+function onSignIn(response){
+  ID_TOKEN = response.credential;
+  var info=parseJwt(ID_TOKEN);
+  CURRENT_EMAIL=(info.email||'').toLowerCase();
+  CURRENT_AGENDA=USERS_FRONT[CURRENT_EMAIL]||info.name||CURRENT_EMAIL;
+  setupShim();
+  var lg=document.getElementById('loginGate'); if(lg) lg.style.display='none';
+  var ar=document.getElementById('appRoot'); if(ar) ar.style.display='block';
+  if(window.startApp) startApp();
+}
+function onAuthError(res){
+  ID_TOKEN=null;
+  var ar=document.getElementById('appRoot'); if(ar) ar.style.display='none';
+  var lg=document.getElementById('loginGate'); if(lg) lg.style.display='grid';
+  var msg=document.getElementById('loginMsg');
+  if(msg) msg.textContent = (res&&res.error==='NO_AUTORIZADO') ? (res.mensaje||'Cuenta no autorizada.') : 'Tu sesión expiró. Vuelve a iniciar sesión.';
+}
+function initGsi(){
+  if(!(window.google&&window.google.accounts&&window.google.accounts.id)) return;
+  google.accounts.id.initialize({ client_id: OAUTH_CLIENT_ID, callback: onSignIn, auto_select:false });
+  var btn=document.getElementById('gbtn');
+  if(btn) google.accounts.id.renderButton(btn, { theme:'filled_black', size:'large', shape:'pill', text:'signin_with', width:260 });
+  google.accounts.id.prompt();
+}
+</script>
+<style>
+  :root{
+    --ink:#1c1a17;--muted:#9b958a;--line:#e8e2d6;--teal:#1c1a17;--teal-d:#000000;--teal-l:#efe9df;
+    --gold:#b1955f;--bad:#a33a32;--bad-l:#f6e9e7;--good:#3f6b4f;--good-l:#eaf0ea;--warn:#9a7b3c;--warn-l:#f6efe2;
+    --radius:12px;--shadow:0 6px 24px rgba(28,26,23,.07);--dark:#0e0d0c;--bg:#f3efe7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Jost',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5}
+  /* Pantalla de login (Google Sign-In) */
+  .logingate{position:fixed;inset:0;background:var(--dark);color:#fff;display:grid;place-items:center;z-index:1000;padding:20px}
+  .logincard{max-width:380px;text-align:center}
+  .loginlogo{width:60px;height:60px;object-fit:contain;margin-bottom:18px}
+  .loginwm{font-family:'Jost',sans-serif;font-weight:500;font-size:23px;letter-spacing:.3em;text-transform:uppercase;line-height:1}
+  .logintag{font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:#8c867c;margin-top:9px}
+  .loginhint{font-size:13.5px;color:#cfc9bd;margin:28px 0 16px}
+  #gbtn{display:flex;justify-content:center}
+  .loginmsg{color:#e8b4ad;font-size:12.5px;margin-top:14px;min-height:16px}
+  .loginnote{font-size:11px;color:#6f6a60;margin-top:24px;line-height:1.5}
+  .app{max-width:1180px;margin:0 auto;padding:0 18px 60px}
+  /* Brand bar (negro, estilo cotización) */
+  .brandbar{display:flex;align-items:center;gap:16px;background:var(--dark);color:#fff;border-radius:0 0 16px 16px;
+    padding:20px 26px;margin:0 -18px 22px}
+  .brandbar .logo{width:46px;height:46px;object-fit:contain;flex-shrink:0}
+  .brandbar .wordmark{font-family:'Jost',sans-serif;font-weight:500;font-size:21px;letter-spacing:.34em;
+    text-transform:uppercase;line-height:1;color:#fff}
+  .brandbar .tagline{font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:#8c867c;margin-top:7px}
+  header.top{display:flex;align-items:center;gap:14px;padding:0}
+  header.top h1{font-size:18px;margin:0;font-weight:650}
+  header.top .sub{color:var(--muted);font-size:12.5px;margin-top:1px}
+  .uchip{margin-left:auto;font-size:11.5px;color:#cfc9bd;background:rgba(255,255,255,.07);
+    border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:6px 13px;letter-spacing:.02em}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 18px}
+  .tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:9px 17px;cursor:pointer;
+    font-weight:500;color:var(--muted);font-size:12.5px;letter-spacing:.04em;display:flex;align-items:center;gap:7px}
+  .tab:hover{border-color:var(--ink);color:var(--ink)} .tab.active{background:var(--dark);border-color:var(--dark);color:#fff}
+  .grid{display:grid;grid-template-columns:1fr 410px;gap:18px;align-items:start}
+  @media(max-width:880px){.grid{grid-template-columns:1fr}}
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+  .card h2{font-size:14px;margin:0 0 2px;font-weight:650}
+  .card .hint{color:var(--muted);font-size:12px;margin-bottom:14px}
+  .section-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.18em;color:var(--ink);
+    font-weight:600;margin:20px 0 12px;padding-bottom:7px;border-bottom:1px solid var(--line)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:560px){.row{grid-template-columns:1fr}}
+  .f{margin-bottom:12px}
+  .f label{display:block;font-size:12px;font-weight:600;margin-bottom:5px}
+  .f label .req{color:var(--bad)} .f label .lockbadge{font-size:10px;color:var(--good);font-weight:700;margin-left:6px}
+  .f input,.f select,.f textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;
+    font-size:13.5px;font-family:inherit;background:#fbfdfe;color:var(--ink)}
+  .f input:focus,.f select:focus,.f textarea:focus{outline:none;border-color:var(--teal);background:#fff;box-shadow:0 0 0 3px var(--teal-l)}
+  .f textarea{resize:vertical;min-height:58px}
+  .f input[readonly]{background:#eef3f5;color:#516770;cursor:not-allowed}
+  .f.invalid input,.f.invalid select,.f.invalid textarea{border-color:var(--bad);background:var(--bad-l)}
+  .f .err{color:var(--bad);font-size:11.5px;margin-top:4px;display:none} .f.invalid .err{display:block}
+  .pill{display:inline-block;background:var(--teal-l);color:var(--teal-d);border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;margin-left:6px}
+  .routebox{display:flex;align-items:center;gap:10px;background:var(--teal-l);border:1px solid #cfe7ea;border-radius:10px;padding:11px 13px;margin-bottom:16px;font-size:12.5px}
+  .routebox b{color:var(--teal-d)}
+  .actions{display:flex;gap:10px;margin-top:20px;align-items:center}
+  .btn{border:0;border-radius:10px;padding:11px 20px;font-size:13.5px;font-weight:700;cursor:pointer}
+  .btn.primary{background:var(--teal);color:#fff} .btn.primary:hover{background:var(--teal-d)}
+  .btn.primary:disabled{opacity:.55;cursor:wait}
+  .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--muted)}
+  /* gate */
+  .searchwrap{position:relative}
+  .searchwrap .sicon{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.6}
+  #patSearch{width:100%;padding:11px 12px 11px 36px;border:1px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;background:#fbfdfe}
+  #patSearch:focus{outline:none;border-color:var(--teal);background:#fff;box-shadow:0 0 0 3px var(--teal-l)}
+  .results{position:absolute;left:0;right:0;top:46px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(16,50,61,.13);z-index:20;overflow:hidden;display:none}
+  .results.show{display:block} .results .ritem{padding:9px 13px;cursor:pointer;border-bottom:1px solid var(--line);font-size:13px}
+  .results .ritem:last-child{border-bottom:0} .results .ritem:hover{background:var(--teal-l)}
+  .results .ritem b{color:var(--ink)} .results .ritem span{color:var(--muted);font-size:11.5px}
+  .results .loading{padding:10px 13px;color:var(--muted);font-size:12px}
+  .patcard{display:flex;align-items:center;gap:12px;background:var(--good-l);border:1px solid #bfe6cf;border-radius:11px;padding:12px 14px;margin-top:10px}
+  .patcard .pav{width:38px;height:38px;border-radius:50%;background:var(--good);color:#fff;display:grid;place-items:center;font-weight:700;font-size:15px;flex-shrink:0}
+  .patcard .pinfo{flex:1;font-size:13px} .patcard .pinfo b{display:block;font-size:13.5px} .patcard .pinfo span{color:var(--muted);font-size:11.5px}
+  .patcard .pid{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--good);background:#fff;border:1px solid #bfe6cf;border-radius:6px;padding:1px 6px}
+  .patcard button{background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted)}
+  .notfound{background:var(--warn-l);border:1px solid #eed9b4;border-radius:11px;padding:14px;margin-top:10px;font-size:13px;color:var(--warn)}
+  .notfound b{color:#8a5b14}
+  .notfound a{display:inline-block;margin-top:9px;background:var(--gold);color:#fff;text-decoration:none;border-radius:9px;padding:8px 14px;font-weight:700;font-size:12.5px}
+  /* preview */
+  .evt{border:1px solid var(--line);border-radius:10px;padding:13px;margin-bottom:11px;background:#fbfdfe}
+  .evt .cal{font-size:11px;font-weight:700;color:#fff;background:var(--teal-d);border-radius:6px;padding:2px 8px;display:inline-block;margin-bottom:8px}
+  .evt .esum{font-weight:600;font-size:12.5px;margin-bottom:6px}
+  .evt .when{font-size:12px;color:var(--muted);margin-bottom:8px}
+  .evt pre{white-space:pre-wrap;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px;margin:0;color:#2a4750}
+  .status{border-radius:10px;padding:12px 14px;font-size:13px;font-weight:600;margin-bottom:14px;display:none}
+  .status.ok{display:block;background:var(--good-l);color:var(--good);border:1px solid #bfe6cf}
+  .status.bad{display:block;background:var(--bad-l);color:var(--bad);border:1px solid #f3c9c4}
+  .status.info{display:block;background:var(--teal-l);color:var(--teal-d);border:1px solid #cfe7ea}
+  .ovr{margin-top:12px;padding:12px;background:#fff;border:1px dashed var(--warn);border-radius:9px}
+  .ovr .ovrt{font-weight:700;color:var(--warn);font-size:12.5px;margin-bottom:9px}
+  .ovr select,.ovr input{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:8px;background:#fbfdfe}
+  .ovr button{width:100%;border:0;border-radius:9px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;background:var(--gold);color:#fff}
+  .ovr button:hover{filter:brightness(.95)}
+  .ovr .ovrerr{color:var(--bad);font-size:11.5px;margin-top:6px;font-weight:600}
+  .cotnote{margin-top:6px;font-size:11.5px;line-height:1.45}
+  .cotnote .cotbad{color:var(--bad);font-weight:600}
+  .cotnote .cotok{color:var(--good);font-weight:600}
+  .status ul{margin:8px 0 0;padding-left:18px;font-weight:500}
+  .empty{color:var(--muted);font-size:12.5px;text-align:center;padding:26px 10px}
+  .legend{font-size:11px;color:var(--muted);margin-top:14px;line-height:1.7} .legend b{color:var(--ink)}
+  .booked{font-size:11.5px;color:var(--muted);margin-top:6px}
+  .daycol{margin-bottom:14px}
+  .daycolh{font-size:10px;text-transform:uppercase;letter-spacing:.1em;font-weight:700;color:#fff;background:var(--dark);
+    border-radius:7px;padding:5px 10px;margin-bottom:6px;display:inline-block}
+  .daycol .dayrow{display:flex;align-items:center;gap:9px;padding:7px 9px;background:#f7f3ec;border:1px solid var(--line);border-radius:8px;font-size:12px;margin-bottom:4px}
+  .dayrow .dtime{font-weight:700;color:var(--ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+  .dayrow .dttl{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dayrow.blk{opacity:.55;background:#efece6}
+  details{margin-top:14px} summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--teal-d)}
+  /* ===== Navegación de vistas + Tablero de confirmaciones ===== */
+  .topnav{display:flex;gap:8px;margin:0 0 14px}
+  .navbtn{padding:9px 16px;border:1px solid var(--line);background:#fff;border-radius:999px;font-family:'Jost',sans-serif;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted)}
+  .navbtn.active{background:var(--dark);color:#fff;border-color:var(--dark)}
+  .boardhead{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+  .boarddate{display:flex;gap:8px;align-items:center}
+  .boarddate input{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px}
+  .boardstats{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 14px}
+  .bstat{flex:1 1 90px;min-width:84px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;text-align:center;background:#fff}
+  .bstat .bn{font-size:20px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+  .bstat .bl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:3px}
+  .bs-c{background:var(--good-l)} .bs-c .bn{color:var(--good)}
+  .bs-p{background:var(--warn-l)} .bs-p .bn{color:var(--warn)}
+  .bs-n{background:var(--bad-l)} .bs-n .bn{color:var(--bad)}
+  .bs-x .bn{color:#666} .bs-r .bn{color:var(--warn)} .bs-t .bn{color:var(--dark)}
+  .boardtable{width:100%;border-collapse:collapse;font-size:12.5px}
+  .boardtable th{background:var(--dark);color:#fff;font-weight:600;text-align:left;padding:8px;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+  .boardtable td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+  .boardtable tr:hover td{background:#faf7f1}
+  .boardtable .sub{font-size:11px;color:var(--muted)}
+  .nowrap{white-space:nowrap;font-variant-numeric:tabular-nums}
+  .lchip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:600;white-space:nowrap;background:var(--teal-l);color:var(--ink)}
+  .lc-cir{background:#eae3f3;color:#5b3f7a} .lc-anes{background:#e7eef6;color:#33567e}
+  .lc-energy{background:#f6efe2;color:#9a7b3c} .lc-cons{background:#eaf0ea;color:#3f6b4f}
+  .lc-iny{background:#f9ecef;color:#9a3c5a}
+  .stsel{padding:5px 7px;border-radius:7px;border:1px solid var(--line);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer}
+  .st-Confirmada{background:var(--good-l);color:var(--good);border-color:#bcd3c2}
+  .st-Pendiente{background:#fff;color:var(--muted)}
+  .st-NoContesta{background:var(--bad-l);color:var(--bad);border-color:#e3bdb8}
+  .st-Cancelada{background:#efefef;color:#666}
+  .st-Reagendada{background:var(--warn-l);color:var(--warn);border-color:#e3d2a8}
+  .btn.wa{background:#25d366;color:#fff;border:none;padding:6px 12px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer}
+  .boardreport{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+  #boardReport pre{white-space:pre-wrap;background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px;font-family:inherit;font-size:12.5px;margin-top:12px}
+  @media(max-width:760px){ .boardtable{font-size:11.5px} .boardtable th,.boardtable td{padding:6px 5px} }
+</style>
+</head>
+<body>
+<div id="loginGate" class="logingate">
+  <div class="logincard">
+    <img class="loginlogo" src="https://altapacientes.miguelsotomd.com/logo_ms_white.png" alt="MS" onerror="this.style.display='none'">
+    <div class="loginwm">Dr. Miguel Soto</div>
+    <div class="logintag">Cirujano Plástico Certificado · Agendar Pacientes</div>
+    <div class="loginhint">Inicia sesión con tu cuenta autorizada</div>
+    <div id="gbtn"></div>
+    <div id="loginMsg" class="loginmsg"></div>
+    <div class="loginnote">Solo cuentas autorizadas por el Dr. Soto pueden acceder.</div>
+  </div>
+</div>
+
+<div class="app" id="appRoot" style="display:none">
+  <header class="brandbar">
+    <img class="logo" src="https://altapacientes.miguelsotomd.com/logo_ms_white.png" alt="MS" onerror="this.style.display='none'">
+    <div>
+      <div class="wordmark">Dr. Miguel Soto</div>
+      <div class="tagline">Cirujano Plástico Certificado · Agendar Pacientes</div>
+    </div>
+    <div class="uchip" id="uchip">…</div>
+  </header>
+
+  <div class="topnav">
+    <button type="button" class="navbtn active" id="navAgendar" onclick="showView('agendar')">📝 Agendar</button>
+    <button type="button" class="navbtn" id="navBoard" onclick="showView('board')">✅ Confirmaciones del día</button>
+    <button type="button" class="navbtn" id="navCitas" onclick="showView('citas')">🔧 Buscar / editar cita</button>
+  </div>
+
+  <div id="viewAgendar">
+  <div class="tabs" id="tabs"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h2 id="formTitle">Consulta</h2>
+      <div class="hint" id="formHint"></div>
+      <div class="gate" id="gate">
+        <div class="section-label" style="margin-top:4px">Paciente <span style="font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted)">— se busca en altapacientes (fuente única)</span></div>
+        <div class="searchwrap">
+          <span class="sicon">🔎</span>
+          <input id="patSearch" type="text" autocomplete="off" placeholder="Buscar por nombre o teléfono…">
+          <div class="results" id="patResults"></div>
+        </div>
+        <div id="patSelected"></div>
+        <div id="patNotFound"></div>
+      </div>
+      <div id="formWrap" style="display:none">
+        <div class="routebox" id="routebox"></div>
+        <form id="form" novalidate></form>
+        <div class="actions">
+          <button type="button" class="btn primary" id="saveBtn">Validar y agendar</button>
+          <button type="button" class="btn ghost" id="clearBtn">Limpiar cita</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card preview">
+      <h2>Resultado <span class="pill" id="evtCount">0</span></h2>
+      <div class="hint">Vista previa del evento canónico. La validación de choques y la escritura las confirma el servidor.</div>
+      <div class="status" id="status"></div>
+      <div id="preview"><div class="empty">Selecciona un paciente y llena la cita.</div></div>
+      <div class="dayview">
+        <div class="section-label" style="margin-top:4px">📅 Agenda del día <span id="dayDate" style="font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted)"></span></div>
+        <div class="booked" id="booked"><div class="empty">Elige una fecha para ver qué hay programado ese día.</div></div>
+      </div>
+      <div class="legend">
+        <b>Reglas:</b> sin paciente del expediente no hay cita · campos obligatorios bloquean · choque o bloqueo impide guardar · zona America/Mexico_City · cirugía = 3 eventos vinculados.
+      </div>
+    </div>
+  </div>
+  </div><!-- /viewAgendar -->
+
+  <div id="viewBoard" style="display:none">
+    <div class="card">
+      <div class="boardhead">
+        <div>
+          <h2 style="margin:0">Confirmaciones del día</h2>
+          <div class="hint">Programación de las 4 agendas. Marca el estatus de cada cita y genera el reporte del día.</div>
+        </div>
+        <div class="boarddate">
+          <input type="date" id="boardDate">
+          <button type="button" class="btn primary" id="boardLoad" onclick="loadBoard()">Cargar día</button>
+        </div>
+      </div>
+      <div class="boardstats" id="boardStats"></div>
+      <div class="status" id="boardStatus"></div>
+      <div id="boardWrap"><div class="empty">Elige una fecha y carga el día.</div></div>
+      <div class="boardreport" id="boardReportBtns" style="display:none">
+        <button type="button" class="btn ghost" onclick="reportePantalla()">📋 Reporte en pantalla</button>
+        <button type="button" class="btn ghost" onclick="reportePDF()">📄 Imprimir / PDF</button>
+        <button type="button" class="btn ghost" onclick="reporteWhatsapp()">📲 Enviar por WhatsApp</button>
+        <button type="button" class="btn ghost" onclick="reporteEmail()">✉️ Enviar por correo</button>
+      </div>
+      <div id="boardReport"></div>
+    </div>
+  </div>
+
+  <div id="viewCitas" style="display:none">
+    <div class="card">
+      <h2 style="margin:0">Buscar / editar cita</h2>
+      <div class="hint">Busca al paciente y administra sus citas: <b>cancelar</b> (libera el anticipo) o <b>reagendar</b>.</div>
+      <div class="searchwrap" style="margin-top:14px">
+        <span class="sicon">🔎</span>
+        <input id="citaSearch" type="text" autocomplete="off" placeholder="Buscar paciente por nombre o teléfono…">
+        <div class="results" id="citaResults"></div>
+      </div>
+      <div id="citaSelected"></div>
+      <div class="status" id="citaStatus"></div>
+      <div id="citaList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== estado / catálogos (llegan del backend) ===== */
+var CAT={}, CALLBL={}, current="consulta", selectedPatient=null, searchTimer=null;
+var cotizaciones=[], selectedCotizacion=null;   // cotizaciones aceptadas del paciente (cirugía)
+
+/* ===== arranque (se llama tras iniciar sesión con Google) ===== */
+function startApp(){
+  google.script.run.withSuccessHandler(function(b){
+    CAT=b.catalogs; CALLBL=b.cal;
+    CAT.procedimientos = b.procedimientos || [];   // los procedimientos llegan aparte del catálogo
+    CAT.procedimientosEstetica = b.procedimientosEstetica || [];   // solo ED/faciales + FZ (medicina estética)
+    document.getElementById("uchip").textContent = "👤 "+(CURRENT_AGENDA || b.usuario || "Sesión activa");
+    buildTypes(); renderTabsInit(); renderForm();
+  }).withFailureHandler(fail).getBootstrap();
+}
+window.startApp = startApp;
+
+/* ===== definición de campos (depende de catálogos) ===== */
+var TYPES={};
+function buildTypes(){
+  var MEDICOS=CAT.medicos, OPERATIVOS=(CAT.operativos||CAT.medicos), CAPTURISTAS=CAT.capturistas, ANEST=CAT.anestesia;
+  // Operativos de TRATAMIENTO (consulta/inyectables/energy/cirujano): sin Karen (ella es solo anestesia/VPA)
+  var OPERATIVOS_TRAT=OPERATIVOS.filter(function(o){return !/karen/i.test(o);});
+  var SINO=["Sí","No aplica"], TIPO_PX=["Primera vez","Subsecuente"], MODAL=["Presencial","Virtual"];
+  var COMMON=[
+    {k:"tipo_px",l:"Tipo de paciente",t:"select",opt:TIPO_PX,req:true},
+    {k:"nombre",l:"Nombre del paciente",t:"text",req:true,fromPatient:true},
+    {k:"telefono",l:"Teléfono",t:"text",req:true,fromPatient:true},
+    {k:"medico",l:"Operativo",t:"select",opt:OPERATIVOS_TRAT,req:true},
+    {k:"modalidad",l:"Modalidad",t:"select",opt:MODAL,req:true}
+  ];
+  var SCHEDULE=[
+    {k:"fecha",l:"Fecha",t:"date",req:true},
+    {k:"hora",l:"Hora inicio",t:"time",req:true},
+    {k:"duracion",l:"Duración (min)",t:"number",req:true}
+  ];
+  var TAIL=[
+    {k:"msi",l:"MSI",t:"text",ph:"NA"},
+    {k:"observaciones",l:"Observaciones",t:"textarea"},
+    {k:"prospecta",l:"Prospecta",t:"select",opt:["NA"].concat(CAPTURISTAS,MEDICOS)},
+    {k:"cierra",l:"Cierra",t:"select",opt:["NA"].concat(CAPTURISTAS,MEDICOS)}
+    // "Capturista/Agenda" ya no se captura: lo estampa el sistema con la cuenta verificada.
+  ];
+  // Consulta Cirugía Plástica: el operativo SIEMPRE es el Dr. Miguel Soto (fijo) y sin MSI
+  var COMMON_CONSULTA=COMMON.map(function(x){ return x.k==="medico"
+    ? {k:"medico",l:"Operativo",t:"select",opt:["Dr. Miguel Soto"],val:"Dr. Miguel Soto",req:true}
+    : x; });
+  // Medicina Estética: la atienden las doctoras (operativo limitado)
+  var DOCTORAS_ESTETICA=['Dra. Laura Tagle','Dra. Samantha Contreras'];
+  var COMMON_ESTETICA=COMMON.map(function(x){ return x.k==="medico"
+    ? {k:"medico",l:"Operativo",t:"select",opt:DOCTORAS_ESTETICA,req:true}
+    : x; });
+  // Cirugía e Inyectables: siempre presencial
+  var COMMON_PRESENCIAL=COMMON.map(function(x){ return x.k==="modalidad"
+    ? {k:"modalidad",l:"Modalidad",t:"select",opt:["Presencial"],val:"Presencial",req:true}
+    : x; });
+  var TAIL_NO_MSI=TAIL.filter(function(x){ return x.k!=="msi"; });
+  TYPES={
+    consulta:{label:"Consulta Cirugía Plástica",icon:"🩺",hint:"Primera vez o subsecuente. Agenda del Dr. Soto.",
+      cal:function(){return CALLBL.consulta;}, dur:function(f){return f.motivo==="Consulta de primera vez"?60:30;},
+      common:COMMON_CONSULTA,
+      motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Consulta de primera vez","Consulta subsecuente"],req:true}],
+      specific:[
+        {k:"interes",l:"Procedimiento de interés",t:"select",opt:(CAT.procedimientos||[])},
+        {k:"correo",l:"Correo electrónico",t:"text",fromPatient:true},
+        {k:"nacimiento",l:"Fecha de nacimiento",t:"text",fromPatient:true},
+        {k:"residencia",l:"Lugar de residencia",t:"text",fromPatient:true},
+        {k:"fotos",l:"Fotos",t:"select",opt:SINO}
+      ], schedule:SCHEDULE, tail:TAIL_NO_MSI},
+    estetica:{label:"Consulta Medicina Estética",icon:"✨",hint:"Atienden Dra. Tagle / Dra. Contreras. Cabina 1 ó 2.",
+      cal:function(f){return f.cabina==="Cabina 2"?CALLBL.cabina2:CALLBL.cabina1;}, dur:function(f){return f.motivo==="Consulta de primera vez"?60:30;},
+      common:COMMON_ESTETICA,
+      motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Consulta de primera vez","Consulta subsecuente","Fibrosis Zero","PRUC"],req:true}],
+      specific:[
+        {k:"cabina",l:"Cabina",t:"select",opt:["Cabina 1","Cabina 2"],req:true},
+        {k:"interes",l:"Procedimiento de interés",t:"select",opt:(CAT.procedimientosEstetica||[])},
+        {k:"correo",l:"Correo electrónico",t:"text",fromPatient:true},
+        {k:"nacimiento",l:"Fecha de nacimiento",t:"text",fromPatient:true},
+        {k:"residencia",l:"Lugar de residencia",t:"text",fromPatient:true},
+        {k:"fotos",l:"Fotos",t:"select",opt:SINO}
+      ], schedule:SCHEDULE, tail:TAIL_NO_MSI},
+    inyectables:{label:"Inyectables",icon:"💉",hint:"Botox, AH, Radiesse… Elige Cabina 1 ó 2.",
+      cal:function(f){return f.cabina==="Cabina 2"?CALLBL.cabina2:CALLBL.cabina1;}, dur:function(){return 30;},
+      common:COMMON_PRESENCIAL, motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Aplicación de inyectables","Retoque de botox"],val:"Aplicación de inyectables",req:true}],
+      specific:[
+        {k:"cabina",l:"Cabina",t:"select",opt:["Cabina 1","Cabina 2"],req:true},
+        {k:"procedimiento",l:"Procedimiento",t:"select",opt:CAT.procIny,req:true},
+        {k:"area",l:"Área(s)",t:"text",req:true,ph:"Full face, frente…"},
+        {k:"anestesia",l:"Anestesia",t:"select",opt:["Local"],val:"Local"}
+      ], schedule:SCHEDULE, tail:TAIL},
+    energy:{label:"Energy devices",icon:"⚡",hint:"Endolift, eCO2, Renuvion. Agenda de Cirugías.",
+      cal:function(){return CALLBL.cirugias;}, dur:function(){return 150;},
+      common:COMMON, motivo:[{k:"motivo",l:"Motivo de visita",t:"text",req:true,val:"Tratamiento Energy Devices"}],
+      specific:[
+        {k:"tratamiento",l:"Tratamiento programado",t:"select",opt:CAT.procEnergy,req:true},
+        {k:"zona",l:"Zona",t:"text",req:true,ph:"Cara y cuello…"},
+        {k:"anestesia",l:"Anestesia",t:"select",opt:ANEST,req:true}
+      ], schedule:SCHEDULE, tail:TAIL},
+    cirugia:{label:"Cirugía",icon:"🔪",hint:"Genera 3 eventos vinculados: VPO (cabina) → VPA → Qx (cirugías).",surgery:true,
+      common:COMMON_PRESENCIAL, motivo:[{k:"cirugia",l:"Cirugía programada",t:"cotizacion",req:true}],
+      specific:[
+        {k:"anestesia",l:"Anestesia",t:"select",opt:["General","Sedación","Local"],req:true},
+        {k:"vpa_operativo",l:"Operativo VPA (anestesióloga)",t:"select",opt:OPERATIVOS,val:"Dra. Karen García"},
+        {k:"cabina_vpo",l:"Cabina VPO",t:"select",opt:["Cabina 1","Cabina 2"],req:true},
+        {k:"vpo_fecha",l:"Fecha VPO",t:"date",req:true},{k:"vpo_hora",l:"Hora VPO",t:"time",req:true},
+        {k:"vpa_fecha",l:"Fecha VPA",t:"date",req:true},{k:"vpa_hora",l:"Hora VPA",t:"time",req:true},
+        {k:"qx_fecha",l:"Fecha Cirugía",t:"date",req:true},{k:"qx_hora",l:"Hora Cirugía",t:"time",req:true},
+        {k:"qx_dur",l:"Duración Qx (min)",t:"number",req:true,val:180},
+        {k:"ingreso",l:"Hora ingreso hospitalario",t:"time"}
+      ], tail:TAIL}
+  };
+}
+
+/* ===== tabs ===== */
+var tabsEl=document.getElementById("tabs");
+function renderTabsInit(){
+  tabsEl.innerHTML="";
+  Object.keys(TYPES).forEach(function(key){
+    var t=TYPES[key], b=document.createElement("button");
+    b.className="tab"+(key===current?" active":""); b.innerHTML="<span>"+t.icon+"</span> "+t.label; b.dataset.k=key;
+    b.onclick=function(){current=key; [].forEach.call(tabsEl.children,function(x){x.classList.toggle("active",x.dataset.k===current);}); renderForm(); clearPreview();};
+    tabsEl.appendChild(b);
+  });
+}
+
+/* ===== form ===== */
+var formEl=document.getElementById("form");
+function field(f){
+  var id="fld_"+f.k;
+  if(f.fromPatient){
+    var v=selectedPatient?(selectedPatient[f.k]||""):"";
+    return '<div class="f" data-for="'+f.k+'"><label>'+f.l+(f.req?' <span class="req">*</span>':'')+'<span class="lockbadge">🔒 expediente</span></label>'+
+      '<input id="'+id+'" data-k="'+f.k+'" type="text" value="'+esc(v)+'" readonly tabindex="-1"><div class="err">Campo obligatorio</div></div>';
+  }
+  if(f.t==="cotizacion"){
+    return '<div class="f" data-for="'+f.k+'"><label>'+f.l+(f.req?' <span class="req">*</span>':'')+
+      ' <span class="lockbadge" style="color:var(--gold)">cotización aceptada</span></label>'+
+      '<select id="'+id+'" data-k="'+f.k+'"><option value="" selected disabled hidden>Cargando…</option></select>'+
+      '<div class="cotnote" id="cotNote"></div><div class="err">Selecciona una cotización aceptada</div></div>';
+  }
+  var ctrl;
+  if(f.t==="select"){
+    var opts=f.opt.map(function(o){return '<option '+(f.val===o?'selected':'')+'>'+esc(o)+'</option>';}).join("");
+    ctrl = f.val ? '<select id="'+id+'" data-k="'+f.k+'">'+opts+'</select>'
+                 : '<select id="'+id+'" data-k="'+f.k+'"><option value="" selected disabled hidden>Seleccionar…</option>'+opts+'</select>';
+  } else if(f.t==="textarea"){ ctrl='<textarea id="'+id+'" data-k="'+f.k+'"></textarea>'; }
+  else { ctrl='<input id="'+id+'" data-k="'+f.k+'" type="'+f.t+'" value="'+(f.val!=null?f.val:"")+'" placeholder="'+(f.ph||"")+'">'; }
+  return '<div class="f" data-for="'+f.k+'"><label>'+f.l+(f.req?' <span class="req">*</span>':'')+'</label>'+ctrl+'<div class="err">Campo obligatorio</div></div>';
+}
+function group(label,fields){
+  if(!fields||!fields.length) return "";
+  var rows=[]; for(var i=0;i<fields.length;i+=2){ rows.push('<div class="row">'+field(fields[i])+(fields[i+1]?field(fields[i+1]):"")+'</div>'); }
+  return '<div class="section-label">'+label+'</div>'+rows.join("");
+}
+function renderForm(){
+  var t=TYPES[current];
+  document.getElementById("formTitle").textContent=t.icon+" "+t.label;
+  document.getElementById("formHint").textContent=t.hint;
+  document.getElementById("formWrap").style.display = selectedPatient ? "block":"none";
+  if(!selectedPatient){ formEl.innerHTML=""; return; }
+  var html="";
+  html+=group("Paciente",t.common.concat(t.motivo));
+  html+=group("Datos del procedimiento",t.specific);
+  if(!t.surgery) html+=group("Horario",t.schedule);
+  html+=group("Comercial / captura",t.tail);
+  formEl.innerHTML=html;
+  if(!t.surgery){
+    var d=document.getElementById("fld_duracion"); if(d&&!d.value) d.value=t.dur(readForm());
+    if(current==="consulta"||current==="estetica"){
+      var mot=document.getElementById("fld_motivo");
+      var modf=document.getElementById("fld_modalidad");
+      var updConsulta=function(){
+        var m=mot?mot.value:"";
+        var revision=(m && m!=="Consulta de primera vez");   // subsecuente / revisión = sin venta
+        var lb=formEl.querySelector('.f[data-for="interes"] label'); if(lb) lb.textContent=revision?"Procedimiento a revisar":"Procedimiento de interés";
+        // revisión: no hay venta → ocultar Prospecta/Cierra
+        ["prospecta","cierra"].forEach(function(k){ var fd=formEl.querySelector('.f[data-for="'+k+'"]'); if(fd) fd.style.display=revision?"none":""; });
+        if(d&&m) d.value=(m==="Consulta de primera vez")?60:30;
+        // Presencial: las fotos no aplican (solo en consulta virtual) → ocultar y limpiar
+        var pres=(modf && modf.value==="Presencial");
+        var ff=formEl.querySelector('.f[data-for="fotos"]');
+        if(ff){ ff.style.display=pres?"none":""; var fi=document.getElementById("fld_fotos"); if(pres && fi) fi.value="No aplica"; }
+      };
+      if(mot){ mot.addEventListener("change",updConsulta); }
+      if(modf){ modf.addEventListener("change",updConsulta); }
+      updConsulta();
+    }
+    if(current==="inyectables"){
+      // Retoque de botox → el procedimiento es Botox, fijo (no puede ser otro)
+      var imot=document.getElementById("fld_motivo");
+      var updIny=function(){
+        var retoque=(imot && imot.value==="Retoque de botox");
+        var pf=document.getElementById("fld_procedimiento");
+        if(pf){ if(retoque){ pf.value="Botox"; pf.disabled=true; pf.style.opacity=".7"; } else { pf.disabled=false; pf.style.opacity=""; } }
+      };
+      if(imot){ imot.addEventListener("change",updIny); }
+      updIny();
+    }
+    var fch=document.getElementById("fld_fecha"); if(fch) fch.addEventListener("change",loadBooked);
+    var cb=document.getElementById("fld_cabina"); if(cb) cb.addEventListener("change",function(){updateRoute();loadBooked();});
+  } else {
+    var qf=document.getElementById("fld_qx_fecha"); if(qf) qf.addEventListener("change",loadBooked);
+    loadCotizaciones();   // cirugía: cargar cotizaciones aceptadas del paciente
+  }
+  updateRoute();
+}
+function loadCotizaciones(){
+  var sel=document.getElementById("fld_cirugia"), note=document.getElementById("cotNote");
+  if(!sel||!selectedPatient) return;
+  selectedCotizacion=null; cotizaciones=[];
+  sel.innerHTML='<option value="" selected disabled hidden>Cargando cotizaciones aceptadas…</option>';
+  if(note) note.innerHTML="";
+  google.script.run.withSuccessHandler(function(list){
+    cotizaciones=list||[];
+    if(!cotizaciones.length){
+      sel.innerHTML='<option value="" selected disabled hidden>Sin cotización aceptada</option>';
+      if(note) note.innerHTML='<span class="cotbad">⚠️ Este paciente no tiene una cotización aceptada. No se puede agendar cirugía hasta que exista una.</span>';
+      return;
+    }
+    sel.innerHTML='<option value="" selected disabled hidden>Selecciona la cotización aceptada…</option>'+
+      cotizaciones.map(function(c){return '<option value="'+esc(c.folio)+'">'+esc(c.folio+' · '+((c.procedimientos||[]).join(' + ')||'—'))+'</option>';}).join("");
+    sel.onchange=function(){
+      selectedCotizacion=cotizaciones.filter(function(c){return c.folio===sel.value;})[0]||null;
+      if(note&&selectedCotizacion){ note.innerHTML='<span class="cotok">✓ '+esc((selectedCotizacion.procedimientos||[]).join(' + '))+' · Aceptada '+esc(selectedCotizacion.fecha||'')+'</span>'; }
+    };
+  }).withFailureHandler(function(err){
+    sel.innerHTML='<option value="" selected disabled hidden>Error al cargar</option>';
+    if(note) note.innerHTML='<span class="cotbad">⚠️ No se pudieron leer las cotizaciones ('+esc((err&&err.message)||err)+'). Verifica que el sheet de cotizaciones esté compartido con sotoagenda.</span>';
+  }).getCotizaciones(selectedPatient.id, selectedPatient.nombre);
+}
+function readForm(){ var o={}; [].forEach.call(formEl.querySelectorAll("[data-k]"),function(el){o[el.dataset.k]=el.value.trim();}); return o; }
+function updateRoute(){
+  var t=TYPES[current], rb=document.getElementById("routebox");
+  if(t.surgery){ rb.innerHTML='📍 <span><b>Routing automático:</b> VPO → '+CALLBL.cabina1.label+' · VPA y Qx → '+CALLBL.cirugias.label+'</span>'; return; }
+  var c=t.cal(readForm()); rb.innerHTML='📍 <span><b>Agenda destino:</b> '+c.label+'</span>';
+}
+
+/* ===== buscador de paciente (servidor) ===== */
+var patSearch=document.getElementById("patSearch"), patResults=document.getElementById("patResults"),
+    patSelectedEl=document.getElementById("patSelected"), patNotFound=document.getElementById("patNotFound");
+patSearch.addEventListener("input",function(){
+  var q=patSearch.value.trim(); patNotFound.innerHTML="";
+  if(q.length<2){ patResults.classList.remove("show"); patResults.innerHTML=""; return; }
+  patResults.innerHTML='<div class="loading">Buscando…</div>'; patResults.classList.add("show");
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(function(){
+    google.script.run.withSuccessHandler(function(matches){
+      if(patSearch.value.trim()!==q) return;
+      if(matches&&matches.length){
+        patResults.innerHTML=matches.map(function(p){
+          return '<div class="ritem" data-id="'+esc(p.id)+'"><b>'+esc(p.nombre)+'</b> <span>· '+esc(p.id)+' · '+esc(p.telefono)+'</span></div>';
+        }).join("");
+        patResults.classList.add("show");
+        [].forEach.call(patResults.querySelectorAll(".ritem"),function(el){
+          el.onclick=function(){ selectPatient(matches.filter(function(p){return p.id===el.dataset.id;})[0]); };
+        });
+      } else {
+        patResults.classList.remove("show"); patResults.innerHTML="";
+        patNotFound.innerHTML='<div class="notfound"><b>Este paciente no está dado de alta.</b><br>'+
+          'No se puede agendar sin expediente. Captúralo primero en altapacientes y vuelve a buscarlo aquí.'+
+          '<br><a href="https://altapacientes.miguelsotomd.com" target="_blank" rel="noopener">+ Dar de alta en altapacientes</a></div>';
+      }
+    }).withFailureHandler(fail).searchPatients(q);
+  },250);
+});
+document.addEventListener("click",function(e){ if(!e.target.closest(".searchwrap")) patResults.classList.remove("show"); });
+
+function selectPatient(p){
+  if(!p) return;
+  selectedPatient=p;
+  patSearch.value=""; patResults.classList.remove("show"); patResults.innerHTML=""; patNotFound.innerHTML="";
+  var apodoTxt = p.apodo ? (' &nbsp;·&nbsp; 🙂 '+esc(p.apodo)) : '';
+  var asesorTxt = p.asesor ? (' &nbsp;·&nbsp; 👩‍💼 '+esc(p.asesor)) : '';
+  patSelectedEl.innerHTML='<div class="patcard"><div class="pav">'+initials(p.nombre)+'</div>'+
+    '<div class="pinfo"><b>'+esc(p.nombre)+' <span class="pid">'+esc(p.id)+'</span></b>'+
+    '<span>📱 '+esc(p.telefono)+' &nbsp;·&nbsp; 📧 '+esc(p.correo||"—")+apodoTxt+asesorTxt+'</span></div>'+
+    '<button type="button" id="changePat">Cambiar</button></div>';
+  document.getElementById("changePat").onclick=clearPatient;
+  renderForm(); clearPreview();
+}
+function clearPatient(){ selectedPatient=null; selectedCotizacion=null; cotizaciones=[]; patSelectedEl.innerHTML=""; patNotFound.innerHTML=""; patSearch.value=""; renderForm(); clearPreview(); patSearch.focus(); }
+
+/* ===== preview cliente (informativo) ===== */
+function buildClientEvents(f){
+  var t=TYPES[current], p=selectedPatient;
+  var sum='👤 Paciente: '+titleCase(p.nombre)+' 📱 Teléfono: '+p.telefono+' 🧑🏻‍⚕️ Médico Tratante: '+(f.medico||"—");
+  function L(a,b){return (b&&String(b).trim())?(a+': '+b):null;}
+  if(t.surgery){
+    var cirTxt = selectedCotizacion ? (((selectedCotizacion.procedimientos||[]).join(' + ')||('Cotización '+selectedCotizacion.folio))+' ['+selectedCotizacion.folio+']') : (f.cirugia||'—');
+    var cirujano=f.medico||'—', anest=f.vpa_operativo||'Dra. Karen García';
+    var d=function(et,op){return [L('🩺 Motivo de visita',et),L('⚪️ Cirugía Programada',cirTxt),L('😴 Anestesia',f.anestesia),
+      L('🏥 Médico Titular','Dr. Miguel Soto'),L('👤 Operativo',op),
+      L('📆 Fecha VPO',f.vpo_fecha+' '+f.vpo_hora),L('📆 Fecha VPA',f.vpa_fecha+' '+f.vpa_hora),L('📆 Fecha Cirugía',f.qx_fecha+' '+f.qx_hora),
+      L('🕞 Ingreso',f.ingreso||'PD'),L('💵 Costo',money(f.costo)),L('💰 Anticipo',money(f.anticipo)),L('☑️ Agenda',CURRENT_AGENDA)].filter(Boolean).join('\n');};
+    var vpo=f.cabina_vpo==="Cabina 2"?CALLBL.cabina2:CALLBL.cabina1;
+    var fc=fichaClient(p,true);   // cirugía: sin "procedimiento de interés"
+    return [{cal:vpo,sum:sum,when:f.vpo_fecha+' '+f.vpo_hora+' (VPO)',desc:d('VPO',cirujano)+fc},
+            {cal:CALLBL.cirugias,sum:sum,when:f.vpa_fecha+' '+f.vpa_hora+' (VPA)',desc:d('VPA',anest)+fc},
+            {cal:CALLBL.cirugias,sum:sum,when:f.qx_fecha+' '+f.qx_hora+' (Cirugía)',desc:d('Cirugía',cirujano)+fc}];
+  }
+  var extra=[];
+  if(current==="consulta"||current==="estetica"){
+    var etiqInt=(f.motivo&&f.motivo!=="Consulta de primera vez")?'⚪️ Procedimiento a revisar':'⚪️ Procedimiento de interés';
+    if(current==="estetica") extra.push(L('🏠 Cabina',f.cabina));
+    extra=extra.concat([L(etiqInt,f.interes),L('📧 Correo',p.correo),L('📆 Nacimiento',p.nacimiento),L('📍 Residencia',p.residencia)]);
+    if(f.modalidad!=="Presencial") extra.push(L('📸 Fotos',f.fotos||'NA'));   // fotos solo en virtual
+  }
+  if(current==="inyectables") extra=[L('🏠 Cabina',f.cabina),L('⚪️ Procedimiento',f.procedimiento),L('⚫️ Área',f.area),L('😴 Anestesia',f.anestesia||'Local')];
+  if(current==="energy") extra=[L('⚪️ Tratamiento',f.tratamiento),L('⚫️ Zona',f.zona),L('😴 Anestesia',f.anestesia)];
+  var titularPrev=(current==="estetica")?(f.medico||'—'):'Dr. Miguel Soto';
+  var desc=['🔄 Tipo de paciente: '+(f.tipo_px||'—'),'🩺 Motivo de visita: '+(f.motivo||'—')].concat(extra.filter(Boolean)).concat([
+    '🏥 Médico Titular: '+titularPrev,'👤 Operativo: '+(f.medico||'—'),
+    '🔘 Modalidad: '+(f.modalidad||'—'),(money(f.costo)?('💵 Costo: '+money(f.costo)):null),(f.msi?('💳 MSI: '+f.msi):null),
+    '❗️ Observaciones: '+(f.observaciones||'—'),((f.prospecta&&f.prospecta!=='NA')?('☑️ Prospecta: '+f.prospecta):null),((f.cierra&&f.cierra!=='NA')?('☑️ Cierra: '+f.cierra):null),'☑️ Agenda: '+(CURRENT_AGENDA||'—')].filter(Boolean)).join('\n')+fichaClient(p);
+  return [{cal:TYPES[current].cal(f),sum:sum,when:(f.fecha||'?')+' '+(f.hora||'?')+' ('+(f.duracion||'?')+' min)',desc:desc}];
+}
+
+/* ===== guardar (servidor autoritativo) ===== */
+var statusEl=document.getElementById("status"), previewEl=document.getElementById("preview"), saveBtn=document.getElementById("saveBtn");
+function clearPreview(){ previewEl.innerHTML='<div class="empty">Selecciona un paciente y llena la cita.</div>'; statusEl.className="status"; document.getElementById("evtCount").textContent="0"; document.getElementById("booked").innerHTML='<div class="empty">Selecciona fecha y agenda.</div>'; }
+function allFields(){ var t=TYPES[current]; var a=t.common.concat(t.motivo,t.specific,t.tail); if(!t.surgery) a=a.concat(t.schedule); return a; }
+function markInvalid(missing){ [].forEach.call(formEl.querySelectorAll(".f"),function(d){d.classList.remove("invalid");}); missing.forEach(function(m){var d=formEl.querySelector('.f[data-for="'+m.k+'"]'); if(d)d.classList.add("invalid");}); }
+
+var SAVE_OVR=null;   // acumula autorizaciones (anticipo y/o empalme) entre intentos
+function doSave(override){
+  if(!selectedPatient){ return; }
+  if(override==null) SAVE_OVR={}; else SAVE_OVR=Object.assign(SAVE_OVR||{}, override);
+  var f=readForm(), fields=allFields();
+  var missing=fields.filter(function(x){return x.req && !(x.fromPatient? (selectedPatient[x.k]) : f[x.k]);});
+  markInvalid(missing);
+  // preview siempre
+  var evs=buildClientEvents(f);
+  document.getElementById("evtCount").textContent=evs.length;
+  previewEl.innerHTML=evs.map(function(ev){return '<div class="evt"><span class="cal">'+esc(ev.cal.label)+'</span><div class="esum">'+esc(ev.sum)+'</div><div class="when">🕒 '+esc(ev.when)+' · America/Mexico_City</div><pre>'+esc(ev.desc)+'</pre></div>';}).join("");
+  if(missing.length){ statusEl.className="status bad"; statusEl.innerHTML='🚫 Faltan '+missing.length+' campo(s) obligatorio(s).<ul>'+missing.map(function(m){return '<li>'+esc(m.l)+'</li>';}).join("")+'</ul>'; return; }
+
+  // payload al servidor
+  var hasOvr=SAVE_OVR&&Object.keys(SAVE_OVR).length;
+  var payload={ tipo:current, paciente:selectedPatient, campos:f, override:(hasOvr?SAVE_OVR:null), cotizacion:(current==="cirugia"?selectedCotizacion:null) };
+  saveBtn.disabled=true; saveBtn.textContent="Validando…";
+  statusEl.className="status info"; statusEl.style.display=""; statusEl.innerHTML=(hasOvr?"⏳ Procesando autorización…":"⏳ Validando y escribiendo en la agenda…");
+  google.script.run.withSuccessHandler(function(res){
+    saveBtn.disabled=false; saveBtn.textContent="Validar y agendar"; statusEl.style.display="";
+    if(res.ok){
+      statusEl.className="status ok";
+      var tag = res.empalme ? ' <b>(empalme autorizado)</b>' : '';
+      var antTag = res.anticipo ? (' · 💳 '+esc(res.anticipo)) : '';
+      statusEl.innerHTML='✅ Agendado'+tag+antTag+'. '+res.eventos.length+(res.eventos.length===1?' evento creado':' eventos vinculados creados')+' en Google Calendar.<ul>'+
+        res.eventos.map(function(e){return '<li>'+esc(e.calendar)+' · '+esc(e.when)+(e.empalmado?' ⚠️ empalme':'')+'</li>';}).join("")+'</ul>';
+    } else if(res.faltantes){ statusEl.className="status bad"; statusEl.innerHTML='🚫 Faltan campos: '+res.faltantes.map(esc).join(", "); }
+    else if(res.error==='SIN_ANTICIPO'){
+      var a=res.anticipo||{};
+      var html=(res.agotado
+        ? '🚫 El anticipo de <b>'+esc(a.etiqueta||'')+'</b> ('+esc(money(a.monto))+') <b>ya fue usado en otra cita</b> — no se puede reutilizar.'
+        : '🚫 No se encontró un <b>anticipo verificado</b> en cobros para <b>'+esc(a.etiqueta||'')+'</b> (mínimo '+esc(money(a.monto))+'). No se guardó.')+(res.detalle?(' '+esc(res.detalle)):'');
+      if(res.canOverrideAnticipo){
+        html+='<div class="ovr"><div class="ovrt">⚠️ ¿Autorizas agendar SIN anticipo verificado? Indica quién lo autoriza:</div>'+
+          '<select id="antAuth"><option value="" selected disabled hidden>Autoriza…</option>'+
+          (CAT.autorizadores||[]).map(function(x){return "<option>"+esc(x)+"</option>";}).join("")+'</select>'+
+          '<input id="antMotivo" placeholder="Motivo (opcional)">'+
+          '<button type="button" id="antBtn">Agendar sin anticipo (autorizado)</button>'+
+          '<div class="ovrerr" id="antErr"></div></div>';
+      }
+      statusEl.className="status bad"; statusEl.innerHTML=html;
+      var ab=document.getElementById("antBtn");
+      if(ab){ ab.onclick=function(){
+        var auth=document.getElementById("antAuth").value;
+        if(!auth){ document.getElementById("antErr").textContent="Selecciona quién autoriza."; return; }
+        doSave({ anticipoAutorizadoPor:auth, anticipoMotivo:document.getElementById("antMotivo").value.trim() });
+      }; }
+    }
+    else if(res.choques){
+      var html='🚫 Choque de horario — no se guardó.<ul>'+res.choques.map(function(c){return '<li><b>'+esc(c.when)+'</b> en '+esc(c.calendar)+' choca con: '+c.hits.map(esc).join("; ")+'</li>';}).join("")+'</ul>';
+      if(res.canOverride){
+        html+='<div class="ovr"><div class="ovrt">⚠️ ¿El empalme es intencional? Indica quién lo autoriza:</div>'+
+          '<select id="ovrAuth"><option value="" selected disabled hidden>Autoriza…</option>'+
+          (CAT.autorizadores||[]).map(function(a){return '<option>'+esc(a)+'</option>';}).join("")+'</select>'+
+          '<input id="ovrMotivo" placeholder="Motivo del empalme (opcional)">'+
+          '<button type="button" id="ovrBtn">Agendar de todos modos (empalme autorizado)</button>'+
+          '<div class="ovrerr" id="ovrErr"></div></div>';
+      }
+      statusEl.className="status bad"; statusEl.innerHTML=html;
+      var ob=document.getElementById("ovrBtn");
+      if(ob){ ob.onclick=function(){
+        var auth=document.getElementById("ovrAuth").value;
+        if(!auth){ document.getElementById("ovrErr").textContent="Selecciona quién autoriza el empalme."; return; }
+        doSave({ autorizadoPor:auth, motivo:document.getElementById("ovrMotivo").value.trim() });
+      }; }
+    }
+    else { statusEl.className="status bad"; statusEl.innerHTML='🚫 '+esc(res.error||"Error desconocido"); }
+  }).withFailureHandler(function(err){ saveBtn.disabled=false; saveBtn.textContent="Validar y agendar"; statusEl.style.display=""; statusEl.className="status bad"; statusEl.innerHTML='🚫 '+esc((err&&err.message)||err); }).createAppointment(payload);
+}
+saveBtn.onclick=function(){ doSave(null); };
+document.getElementById("clearBtn").onclick=function(){ renderForm(); clearPreview(); };
+
+/* ===== panel "ocupado" en vivo ===== */
+function loadBooked(){
+  var box=document.getElementById("booked"), dd=document.getElementById("dayDate");
+  if(!selectedPatient||!box) return;
+  var t=TYPES[current], f=readForm();
+  var dateStr = t.surgery ? f.qx_fecha : f.fecha;
+  // SIEMPRE las 4 agendas, para ver el panorama completo y no fallar al validar
+  var ids=[CALLBL.consulta.id, CALLBL.cirugias.id, CALLBL.cabina1.id, CALLBL.cabina2.id];
+  if(dd) dd.textContent = dateStr ? ('· '+dateStr) : '';
+  if(!dateStr){ box.innerHTML='<div class="empty">Elige una fecha para ver qué hay programado ese día.</div>'; return; }
+  box.innerHTML='<div class="empty">Cargando agenda del día…</div>';
+  google.script.run.withSuccessHandler(function(list){
+    if(!list||!list.length){ box.innerHTML='<div class="empty">✓ Día libre en esas agendas.</div>'; return; }
+    // agrupar por agenda para verlas por separado
+    var groups={}, order=[];
+    list.forEach(function(e){ if(!groups[e.cal]){groups[e.cal]=[];order.push(e.cal);} groups[e.cal].push(e); });
+    box.innerHTML=order.map(function(cal){
+      return '<div class="daycol"><div class="daycolh">'+esc(cal)+'</div>'+
+        groups[cal].map(function(e){
+          return '<div class="dayrow'+(e.bloqueo?' blk':'')+'"><span class="dtime">'+esc(e.ini)+'–'+esc(e.fin)+'</span><span class="dttl">'+esc(e.title)+'</span></div>';
+        }).join("")+'</div>';
+    }).join("");
+  }).withFailureHandler(function(err){ box.innerHTML='<div class="empty">No se pudo cargar la agenda ('+esc((err&&err.message)||err)+').</div>'; }).getDaySchedule(ids, dateStr);
+}
+
+/* ===== helpers ===== */
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function initials(n){ return String(n||"").split(/\s+/).slice(0,2).map(function(w){return w[0]||"";}).join("").toUpperCase(); }
+function titleCase(s){ return String(s||"").replace(/\s+/g," ").trim().replace(/\b\w/g,function(c){return c.toUpperCase();}); }
+function money(s){ if(!s)return""; var n=String(s).replace(/[^\d.]/g,""); if(!n)return String(s); return "$"+Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fichaClient(p,skipInteres){
+  function L(a,b){return (b&&String(b).trim())?(a+': '+b):null;}
+  var l=[L('🙂 Le gusta que le digan',p.apodo),L('🎂 Edad',p.edad),L('📆 Nacimiento',p.nacimiento),L('⚧ Género',p.genero),
+    L('📍 Residencia',p.residencia),L('🤝 Referido por',p.referido),
+    L('👩‍💼 Asesor',p.asesor),L('🏷️ Categoría',p.categoria),L('😊 Satisfacción',p.satisfaccion),L('🗒️ Notas del expediente',p.comentarios)].filter(Boolean);
+  return l.length?('\n\n——— Ficha del paciente (altapacientes) ———\n'+l.join('\n')):'';
+}
+function fail(err){ var st=document.getElementById("status"); if(st){ st.className="status bad"; st.innerHTML='🚫 '+esc((err&&err.message)||err); } }
+
+/* =========================================================================
+   TABLERO DE CONFIRMACIONES (reproduce la "Programación" diaria)
+   ========================================================================= */
+var BOARD_ROWS=[];
+function showView(which){
+  var map={agendar:'viewAgendar',board:'viewBoard',citas:'viewCitas'};
+  var nav={agendar:'navAgendar',board:'navBoard',citas:'navCitas'};
+  Object.keys(map).forEach(function(k){
+    var v=document.getElementById(map[k]); if(v) v.style.display=(k===which)?'block':'none';
+    var n=document.getElementById(nav[k]); if(n) n.classList.toggle('active',k===which);
+  });
+  if(which==='board'){ var d=document.getElementById('boardDate'); if(d&&!d.value) d.value=todayStr(); }
+}
+function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtFecha(d){
+  var p=(d||'').split('-'); if(p.length<3) return d||'';
+  var dias=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  var mes=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  var dt=new Date(+p[0],+p[1]-1,+p[2]);
+  return dias[dt.getDay()]+' '+(+p[2])+' de '+mes[+p[1]-1]+' de '+p[0];
+}
+function boardMsg(t,k){ var el=document.getElementById('boardStatus'); if(!el)return; el.className='status '+(k||'info'); el.innerHTML=t; }
+
+function loadBoard(){
+  var d=document.getElementById('boardDate').value;
+  if(!d){ boardMsg('Elige una fecha.','bad'); return; }
+  var wrap=document.getElementById('boardWrap');
+  wrap.innerHTML='<div class="empty">Cargando la programación…</div>';
+  document.getElementById('boardReport').innerHTML='';
+  document.getElementById('boardReportBtns').style.display='none';
+  document.getElementById('boardStats').innerHTML='';
+  boardMsg('','info');
+  google.script.run.withSuccessHandler(function(res){
+    if(!res||!res.ok){ wrap.innerHTML='<div class="empty">No se pudo cargar ('+esc((res&&res.error)||'?')+').</div>'; return; }
+    BOARD_ROWS=res.filas||[];
+    renderBoard(BOARD_ROWS);
+  }).withFailureHandler(function(err){ wrap.innerHTML='<div class="empty">Error: '+esc((err&&err.message)||err)+'.</div>'; }).getDayBoard(d);
+}
+
+function renderBoard(rows){
+  var wrap=document.getElementById('boardWrap');
+  if(!rows.length){ wrap.innerHTML='<div class="empty">No hay citas programadas ese día.</div>'; document.getElementById('boardStats').innerHTML=''; return; }
+  var lc={'Consulta':'lc-cons','Consulta estética':'lc-iny','Cirugía':'lc-cir','Cirugía (VPO)':'lc-cir','Anestesia':'lc-anes','Energy Devices':'lc-energy','Inyectables':'lc-iny'};
+  var h='<table class="boardtable"><thead><tr><th>Hora</th><th>Paciente</th><th>Línea de negocio</th><th>Descripción</th><th>Área</th><th>Operativo</th><th>Estatus</th><th>WhatsApp</th><th>Acciones</th></tr></thead><tbody>';
+  rows.forEach(function(r,i){
+    h+='<tr>'+
+      '<td class="nowrap">'+esc(r.horaIni)+'–'+esc(r.horaFin)+'</td>'+
+      '<td><b>'+esc(r.paciente||'—')+'</b>'+(r.telefono?('<div class="sub">'+esc(r.telefono)+'</div>'):'')+'</td>'+
+      '<td><span class="lchip '+(lc[r.linea]||'')+'">'+esc(r.linea)+'</span></td>'+
+      '<td>'+esc(r.descripcion||'—')+(r.autorizo?('<div class="sub" style="color:var(--warn);font-weight:600">⚠️ Empalme · autorizó: '+esc(r.autorizo)+'</div>'):(r.empalme?'<div class="sub" style="color:var(--warn);font-weight:600">⚠️ Empalme autorizado</div>':''))+'</td>'+
+      '<td>'+esc(r.area||'—')+'</td>'+
+      '<td>'+esc(r.operativo||'—')+'</td>'+
+      '<td>'+statusSelect(i,r.estatus)+'</td>'+
+      '<td>'+(r.telefono?('<button type="button" class="btn wa" onclick="waPatient('+i+')">WhatsApp</button>'):'<span class="sub">sin tel.</span>')+'</td>'+
+      '<td class="nowrap"><button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px" title="Reagendar" onclick="boardReag('+i+')">↻</button> <button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px;color:#a33a32" title="Cancelar" onclick="boardCancel('+i+')">✕</button></td>'+
+    '</tr>';
+  });
+  h+='</tbody></table>';
+  wrap.innerHTML=h;
+  document.getElementById('boardReportBtns').style.display='flex';
+  renderStats(rows);
+}
+function statusSelect(i,val){
+  var opts=['Pendiente','Confirmada','No Contesta','Cancelada','Reagendada'];
+  var s='<select class="stsel st-'+val.replace(/\s/g,'')+'" onchange="onStatus('+i+',this)">';
+  opts.forEach(function(o){ s+='<option'+(o===val?' selected':'')+'>'+o+'</option>'; });
+  return s+'</select>';
+}
+function onStatus(i,sel){
+  var r=BOARD_ROWS[i], nuevo=sel.value, old=r.estatus;
+  sel.disabled=true; sel.className='stsel st-'+nuevo.replace(/\s/g,'');
+  google.script.run.withSuccessHandler(function(res){
+    sel.disabled=false;
+    if(!res||!res.ok){ alert('No se pudo guardar el estatus: '+((res&&res.error)||'?')); sel.value=old; sel.className='stsel st-'+old.replace(/\s/g,''); return; }
+    r.estatus=nuevo; renderStats(BOARD_ROWS);
+  }).withFailureHandler(function(err){ sel.disabled=false; sel.value=old; sel.className='stsel st-'+old.replace(/\s/g,''); alert('Error: '+((err&&err.message)||err)); }).setStatus(r.calId,r.eventId,nuevo);
+}
+function renderStats(rows){
+  var c={Pendiente:0,Confirmada:0,'No Contesta':0,Cancelada:0,Reagendada:0};
+  rows.forEach(function(r){ if(c[r.estatus]!==undefined)c[r.estatus]++; });
+  function chip(l,n,k){ return '<div class="bstat bs-'+k+'"><div class="bn">'+n+'</div><div class="bl">'+l+'</div></div>'; }
+  document.getElementById('boardStats').innerHTML=
+    chip('Total',rows.length,'t')+chip('Confirmadas',c.Confirmada,'c')+chip('Pendientes',c.Pendiente,'p')+
+    chip('No contesta',c['No Contesta'],'n')+chip('Canceladas',c.Cancelada,'x')+chip('Reagendadas',c.Reagendada,'r');
+}
+
+/* ---- WhatsApp por paciente (mensaje según tipo de cita) ---- */
+function waTel(t){ var d=String(t||'').replace(/\D/g,''); if(d.length===10) return '52'+d; if(d.indexOf('52')===0&&d.length>=12) return d; return d; }
+function waMsg(r){
+  var nombre=((r.paciente||'').trim().split(' ')[0])||(r.paciente||'');
+  var fecha=fmtFecha(document.getElementById('boardDate').value);
+  var hora=r.horaIni, proc=r.descripcion||'', area=r.area||'';
+  var base='Hola '+nombre+', le saluda el equipo del Dr. Miguel Soto 👋.\n\n';
+  var cierre='\n\nPor favor responda *CONFIRMO* para confirmar su asistencia. ¡Le esperamos! 🤍';
+  if(r.tipoMsg==='consulta')
+    return base+'Le confirmamos su *consulta* para el *'+fecha+'* a las *'+hora+' hrs*.'+cierre;
+  if(r.tipoMsg==='anestesia')
+    return base+'Le recordamos su *valoración preanestésica (VPA)* con la Dra. Karen García el *'+fecha+'* a las *'+hora+' hrs*, previa a su cirugía.\nLleve por favor sus estudios de laboratorio recientes.'+cierre;
+  if(r.tipoMsg==='cirugia')
+    return base+'Le confirmamos su *cirugía*'+(proc?(' ('+proc+')'):'')+' el *'+fecha+'* a las *'+hora+' hrs*.\n\n📋 *Indicaciones importantes:*\n• Ayuno estricto de 8 horas.\n• Retire esmalte de uñas, joyería y maquillaje.\n• Acuda con ropa cómoda y un acompañante.\n• No olvide completar su VPO y su valoración preanestésica (VPA).'+cierre;
+  if(r.tipoMsg==='energy')
+    return base+'Le recordamos su sesión de *'+(proc||'tratamiento')+'*'+(area?(' en '+area):'')+' el *'+fecha+'* a las *'+hora+' hrs*.\nAcuda con la zona a tratar limpia, sin cremas ni maquillaje.'+cierre;
+  return base+'Le recordamos su cita de *'+(proc||'aplicación')+'*'+(area?(' en '+area):'')+' el *'+fecha+'* a las *'+hora+' hrs*.'+cierre;
+}
+function waPatient(i){
+  var r=BOARD_ROWS[i];
+  window.open('https://wa.me/'+waTel(r.telefono)+'?text='+encodeURIComponent(waMsg(r)),'_blank');
+}
+
+/* ---- Reportes del día ---- */
+function reportText(){
+  var fecha=fmtFecha(document.getElementById('boardDate').value), rows=BOARD_ROWS;
+  var c={Pendiente:0,Confirmada:0,'No Contesta':0,Cancelada:0,Reagendada:0};
+  rows.forEach(function(r){ if(c[r.estatus]!==undefined)c[r.estatus]++; });
+  var t='*Reporte de confirmaciones — '+fecha+'*\nDr. Miguel Soto\n\n';
+  t+='✅ Confirmadas: '+c.Confirmada+'   ⏳ Pendientes: '+c.Pendiente+'   📵 No contesta: '+c['No Contesta']+'\n';
+  t+='❌ Canceladas: '+c.Cancelada+'   🔁 Reagendadas: '+c.Reagendada+'   📊 Total: '+rows.length+'\n\n';
+  var icon={Confirmada:'✅',Pendiente:'⏳','No Contesta':'📵',Cancelada:'❌',Reagendada:'🔁'};
+  rows.forEach(function(r){ t+=(icon[r.estatus]||'•')+' '+r.horaIni+' — '+r.paciente+' ('+r.linea+(r.descripcion?(': '+r.descripcion):'')+') — '+r.estatus+'\n'; });
+  return t;
+}
+function reportePantalla(){
+  if(!BOARD_ROWS.length){ boardMsg('Primero carga un día.','bad'); return; }
+  document.getElementById('boardReport').innerHTML='<pre>'+esc(reportText())+'</pre>';
+}
+function reporteWhatsapp(){ if(!BOARD_ROWS.length)return; window.open('https://wa.me/?text='+encodeURIComponent(reportText()),'_blank'); }
+function reporteEmail(){
+  if(!BOARD_ROWS.length)return;
+  var fecha=fmtFecha(document.getElementById('boardDate').value);
+  location.href='mailto:?subject='+encodeURIComponent('Reporte de confirmaciones — '+fecha)+'&body='+encodeURIComponent(reportText());
+}
+function reportePDF(){
+  if(!BOARD_ROWS.length){ boardMsg('Primero carga un día.','bad'); return; }
+  var fecha=fmtFecha(document.getElementById('boardDate').value), rows=BOARD_ROWS;
+  var c={Pendiente:0,Confirmada:0,'No Contesta':0,Cancelada:0,Reagendada:0};
+  rows.forEach(function(r){ if(c[r.estatus]!==undefined)c[r.estatus]++; });
+  var filas=rows.map(function(r){
+    return '<tr><td>'+esc(r.horaIni)+'–'+esc(r.horaFin)+'</td><td>'+esc(r.paciente||'')+'</td><td>'+esc(r.linea)+'</td><td>'+esc(r.descripcion||'')+'</td><td>'+esc(r.area||'')+'</td><td>'+esc(r.operativo||'')+'</td><td class="e e-'+r.estatus.replace(/\s/g,'')+'">'+esc(r.estatus)+'</td></tr>';
+  }).join('');
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>Programación '+esc(fecha)+'</title><style>'+
+    "@page{size:landscape;margin:14mm}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1c1a17;font-size:11px}"+
+    'h1{font-size:16px;letter-spacing:.25em;text-transform:uppercase;margin:0;font-weight:500}.tag{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#9b958a;margin:3px 0 14px}'+
+    '.mono{width:42px;height:42px;border:2px solid #0e0d0c;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;letter-spacing:.05em;float:right}'+
+    '.sum{margin:0 0 12px;font-size:11px}.sum b{margin-right:14px}'+
+    'table{width:100%;border-collapse:collapse}th{background:#0e0d0c;color:#fff;text-align:left;padding:6px 7px;font-size:9px;text-transform:uppercase;letter-spacing:.05em}'+
+    'td{padding:5px 7px;border-bottom:1px solid #e8e2d6}'+
+    '.e{font-weight:700}.e-Confirmada{color:#3f6b4f}.e-NoContesta{color:#a33a32}.e-Pendiente{color:#9a7b3c}.e-Cancelada{color:#777}.e-Reagendada{color:#9a7b3c}'+
+    '</style></head><body>'+
+    '<div class="mono">MS</div><h1>Programación del día</h1><div class="tag">Dr. Miguel Soto · Cirujano Plástico Certificado</div>'+
+    '<div class="sum"><b>'+esc(fecha)+'</b> &nbsp; ✅ Confirmadas: '+c.Confirmada+' &nbsp; ⏳ Pendientes: '+c.Pendiente+' &nbsp; 📵 No contesta: '+c['No Contesta']+' &nbsp; ❌ Canceladas: '+c.Cancelada+' &nbsp; 🔁 Reagendadas: '+c.Reagendada+' &nbsp; 📊 Total: '+rows.length+'</div>'+
+    '<table><thead><tr><th>Hora</th><th>Paciente</th><th>Línea de negocio</th><th>Descripción</th><th>Área</th><th>Operativo</th><th>Estatus</th></tr></thead><tbody>'+filas+'</tbody></table>'+
+    '<script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script></body></html>';
+  var w=window.open('','_blank'); w.document.write(html); w.document.close();
+}
+
+/* =========================================================================
+   BUSCAR / EDITAR CITA  (cancelar · reagendar)
+   ========================================================================= */
+var CITA_PATIENT=null, CITAS=[], CITAS_FOUND=[], citaTimer=null;
+(function(){
+  var s=document.getElementById('citaSearch'), r=document.getElementById('citaResults');
+  if(!s) return;
+  s.addEventListener('input',function(){
+    var q=s.value.trim();
+    if(q.length<2){ r.classList.remove('show'); r.innerHTML=''; return; }
+    clearTimeout(citaTimer);
+    citaTimer=setTimeout(function(){
+      google.script.run.withSuccessHandler(function(list){
+        CITAS_FOUND=list||[];
+        r.innerHTML=CITAS_FOUND.length? CITAS_FOUND.map(function(p,i){return '<div class="res" onclick="pickCitaPatient('+i+')"><b>'+esc(p.nombre)+'</b> <span class="pid">'+esc(p.id)+'</span><br><span>📱 '+esc(p.telefono||'')+'</span></div>';}).join("") : '<div class="res"><span class="empty">Sin resultados</span></div>';
+        r.classList.add('show');
+      }).withFailureHandler(function(){}).searchPatients(q);
+    },250);
+  });
+})();
+function pickCitaPatient(i){
+  CITA_PATIENT=CITAS_FOUND[i];
+  var r=document.getElementById('citaResults'); r.classList.remove('show'); r.innerHTML=''; document.getElementById('citaSearch').value='';
+  document.getElementById('citaSelected').innerHTML='<div class="patcard"><div class="pav">'+initials(CITA_PATIENT.nombre)+'</div><div class="pinfo"><b>'+esc(CITA_PATIENT.nombre)+' <span class="pid">'+esc(CITA_PATIENT.id)+'</span></b><span>📱 '+esc(CITA_PATIENT.telefono||'')+'</span></div></div>';
+  loadCitas();
+}
+function citaMsg(t,k){ var el=document.getElementById('citaStatus'); if(el){ el.className='status '+(k||'info'); el.innerHTML=t; } }
+function loadCitas(){
+  if(!CITA_PATIENT) return;
+  var box=document.getElementById('citaList'); box.innerHTML='<div class="empty">Cargando citas…</div>'; citaMsg('','info');
+  google.script.run.withSuccessHandler(function(res){
+    if(!res||!res.ok){ box.innerHTML='<div class="empty">No se pudo cargar.</div>'; return; }
+    CITAS=res.citas||[]; renderCitas();
+  }).withFailureHandler(function(err){ box.innerHTML='<div class="empty">Error: '+esc((err&&err.message)||err)+'</div>'; })
+    .findCitas({pacienteId:CITA_PATIENT.id, nombre:CITA_PATIENT.nombre, telefono:CITA_PATIENT.telefono});
+}
+function renderCitas(){
+  var box=document.getElementById('citaList');
+  if(!CITAS.length){ box.innerHTML='<div class="empty">Este paciente no tiene citas en el rango (−7 a +120 días).</div>'; return; }
+  box.innerHTML='<div class="section-label" style="margin:10px 0 6px">Citas del paciente</div>'+CITAS.map(function(c,i){
+    var canc=c.cancelada?' <span style="color:#a33a32;font-weight:700">CANCELADA</span>':'';
+    return '<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px;'+(c.cancelada?'opacity:.55':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">'+
+        '<div><b>'+esc(fmtFecha(c.fecha))+'</b> · '+esc(c.hora)+'–'+esc(c.horaFin)+' &nbsp;<span class="lchip">'+esc(c.linea)+'</span>'+canc+
+        '<div style="color:var(--muted);font-size:12px;margin-top:3px">'+esc(c.descripcion||'—')+(c.operativo?(' · '+esc(c.operativo)):'')+' · estatus: '+esc(c.estatus)+(c.etapa?(' · etapa '+esc(c.etapa)):'')+'</div></div>'+
+        (c.cancelada?'':'<div style="display:flex;gap:6px">'+
+          '<button type="button" class="btn ghost" onclick="reagCita('+i+')">Reagendar</button>'+
+          '<button type="button" class="btn ghost" style="color:#a33a32;border-color:#e3bdb8" onclick="cancCita('+i+')">Cancelar</button></div>')+
+      '</div><div id="reag_'+i+'"></div></div>';
+  }).join("");
+}
+function cancCita(i){
+  var c=CITAS[i];
+  if(!confirm('¿Cancelar esta cita del '+fmtFecha(c.fecha)+' '+c.hora+'?'+(c.etapa?'\n(Es parte de una cirugía: se cancelan las 3 etapas.)':''))) return;
+  var motivo=prompt('Motivo de la cancelación (opcional):','')||'';
+  citaMsg('⏳ Cancelando…','info');
+  google.script.run.withSuccessHandler(function(res){
+    if(!res||!res.ok){ citaMsg('🚫 '+esc((res&&res.error)||'Error'),'bad'); return; }
+    citaMsg('✅ Cancelada'+(res.cancelados>1?(' ('+res.cancelados+' eventos)'):'')+'. El anticipo queda liberado.','ok'); loadCitas();
+  }).withFailureHandler(function(err){ citaMsg('🚫 '+esc((err&&err.message)||err),'bad'); }).cancelCita({calId:c.calId,eventId:c.eventId,motivo:motivo});
+}
+function reagCita(i){
+  var c=CITAS[i], box=document.getElementById('reag_'+i);
+  if(box.innerHTML){ box.innerHTML=''; return; }
+  box.innerHTML='<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+    '<input type="date" id="rfecha_'+i+'" value="'+esc(c.fecha)+'">'+
+    '<input type="time" id="rhora_'+i+'" value="'+esc(c.hora)+'">'+
+    '<input type="number" id="rdur_'+i+'" value="'+esc(c.dur)+'" style="width:80px" title="Duración (min)">'+
+    '<button type="button" class="btn primary" onclick="reagGuardar('+i+')">Guardar cambio</button>'+
+    '<span id="rerr_'+i+'" style="color:#a33a32;font-size:12px"></span></div>';
+}
+function reagGuardar(i,override){
+  var c=CITAS[i];
+  var fecha=document.getElementById('rfecha_'+i).value, hora=document.getElementById('rhora_'+i).value, dur=document.getElementById('rdur_'+i).value;
+  if(!fecha||!hora){ document.getElementById('rerr_'+i).textContent='Falta fecha u hora.'; return; }
+  citaMsg('⏳ Reagendando…','info');
+  google.script.run.withSuccessHandler(function(res){
+    if(res&&res.ok){ citaMsg('✅ Reagendada a '+esc(res.when)+'.','ok'); loadCitas(); return; }
+    if(res&&res.choques){
+      var a=prompt('⚠️ Choque de horario:\n'+res.choques[0].hits.join('\n')+'\n\n¿Quién autoriza el empalme? (nombre exacto: Dr. Miguel Soto, Dra. Laura Tagle o Claudia Falcón)');
+      if(a){ reagGuardar.ovr=true; google.script.run.withSuccessHandler(function(r2){ if(r2&&r2.ok){ citaMsg('✅ Reagendada (empalme autorizado) a '+esc(r2.when)+'.','ok'); loadCitas(); } else citaMsg('🚫 '+esc((r2&&r2.error)||'Error'),'bad'); }).withFailureHandler(function(e){citaMsg('🚫 '+esc((e&&e.message)||e),'bad');}).reschedule({calId:c.calId,eventId:c.eventId,fecha:fecha,hora:hora,dur:dur,override:{autorizadoPor:a}}); }
+      else citaMsg('🚫 Reagendado cancelado (choque sin autorizar).','bad');
+      return;
+    }
+    citaMsg('🚫 '+esc((res&&res.error)||'Error'),'bad');
+  }).withFailureHandler(function(err){ citaMsg('🚫 '+esc((err&&err.message)||err),'bad'); })
+    .reschedule({calId:c.calId,eventId:c.eventId,fecha:fecha,hora:hora,dur:dur,override:override||null});
+}
+
+/* Acciones rápidas desde el tablero de confirmaciones */
+function boardCancel(i){
+  var r=BOARD_ROWS[i];
+  if(!confirm('¿Cancelar la cita de '+r.paciente+' ('+r.horaIni+')?')) return;
+  var motivo=prompt('Motivo (opcional):','')||'';
+  google.script.run.withSuccessHandler(function(res){ if(res&&res.ok){ loadBoard(); } else alert('🚫 '+((res&&res.error)||'Error')); }).withFailureHandler(function(e){alert((e&&e.message)||e);}).cancelCita({calId:r.calId,eventId:r.eventId,motivo:motivo});
+}
+function boardReag(i){
+  var r=BOARD_ROWS[i];
+  var fecha=prompt('Nueva fecha (AAAA-MM-DD):',document.getElementById('boardDate').value); if(!fecha)return;
+  var hora=prompt('Nueva hora (HH:MM):',r.horaIni); if(!hora)return;
+  function go(ovr){ google.script.run.withSuccessHandler(function(res){
+    if(res&&res.ok){ loadBoard(); return; }
+    if(res&&res.choques){ var a=prompt('Choque:\n'+res.choques[0].hits.join('\n')+'\n¿Quién autoriza?'); if(a) go({autorizadoPor:a}); return; }
+    alert('🚫 '+((res&&res.error)||'Error'));
+  }).withFailureHandler(function(e){alert((e&&e.message)||e);}).reschedule({calId:r.calId,eventId:r.eventId,fecha:fecha,hora:hora,override:ovr||null}); }
+  go(null);
+}
+</script>
+<script src="https://accounts.google.com/gsi/client" onload="initGsi()" async defer></script>
+</body>
+</html>
     getBootstrap:      function(){ return {a:'bootstrap', p:{}}; },
     searchPatients:    function(q){ return {a:'search', p:{query:q}}; },
     createAppointment: function(p){ return {a:'create', p:p}; },
