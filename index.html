@@ -47,8 +47,20 @@ function setupShim(){
 }
 setupShim();
 
+/* Mapa cuenta -> persona (debe coincidir con CONFIG.USERS del backend). Solo para mostrar el nombre. */
+var USERS_FRONT = {
+  'miguelsotomd@gmail.com':'Dr. Miguel Soto','miguelsotoadmi@gmail.com':'Anahi Alvarado',
+  'sotoagenda@gmail.com':'Valeria Lima','renasteventas@gmail.com':'Susana Palacios',
+  'workspacemiguelsoto@gmail.com':'Claudia Falcón'
+};
+var CURRENT_EMAIL='', CURRENT_AGENDA='';
+function parseJwt(t){ try{ return JSON.parse(decodeURIComponent(escape(atob(String(t).split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))))); }catch(e){ return {}; } }
+
 function onSignIn(response){
   ID_TOKEN = response.credential;
+  var info=parseJwt(ID_TOKEN);
+  CURRENT_EMAIL=(info.email||'').toLowerCase();
+  CURRENT_AGENDA=USERS_FRONT[CURRENT_EMAIL]||info.name||CURRENT_EMAIL;
   setupShim();
   var lg=document.getElementById('loginGate'); if(lg) lg.style.display='none';
   var ar=document.getElementById('appRoot'); if(ar) ar.style.display='block';
@@ -325,7 +337,7 @@ function startApp(){
   google.script.run.withSuccessHandler(function(b){
     CAT=b.catalogs; CALLBL=b.cal;
     CAT.procedimientos = b.procedimientos || [];   // los procedimientos llegan aparte del catálogo
-    document.getElementById("uchip").textContent = b.usuario ? ("👤 "+b.usuario) : "Sesión activa";
+    document.getElementById("uchip").textContent = "👤 "+(CURRENT_AGENDA || b.usuario || "Sesión activa");
     buildTypes(); renderTabsInit(); renderForm();
   }).withFailureHandler(fail).getBootstrap();
 }
@@ -352,8 +364,8 @@ function buildTypes(){
     {k:"msi",l:"MSI",t:"text",ph:"NA"},
     {k:"observaciones",l:"Observaciones",t:"textarea"},
     {k:"prospecta",l:"Prospecta",t:"select",opt:["NA"].concat(CAPTURISTAS,MEDICOS)},
-    {k:"cierra",l:"Cierra",t:"select",opt:["NA"].concat(CAPTURISTAS,MEDICOS)},
-    {k:"capturista",l:"Capturista (Agenda)",t:"select",opt:CAPTURISTAS,req:true}
+    {k:"cierra",l:"Cierra",t:"select",opt:["NA"].concat(CAPTURISTAS,MEDICOS)}
+    // "Capturista/Agenda" ya no se captura: lo estampa el sistema con la cuenta verificada.
   ];
   // Consulta: médico fijo (solo Dr. Miguel Soto) y sin MSI
   var COMMON_CONSULTA=COMMON;   // consulta: operativo seleccionable (médico titular = Miguel implícito)
@@ -569,7 +581,7 @@ function buildClientEvents(f){
     var d=function(et,op){return [L('🩺 Motivo de visita',et),L('⚪️ Cirugía Programada',cirTxt),L('😴 Anestesia',f.anestesia),
       L('🏥 Médico Titular','Dr. Miguel Soto'),L('👤 Operativo',op),
       L('📆 Fecha VPO',f.vpo_fecha+' '+f.vpo_hora),L('📆 Fecha VPA',f.vpa_fecha+' '+f.vpa_hora),L('📆 Fecha Cirugía',f.qx_fecha+' '+f.qx_hora),
-      L('🕞 Ingreso',f.ingreso||'PD'),L('💵 Costo',money(f.costo)),L('💰 Anticipo',money(f.anticipo)),L('☑️ Agenda',f.capturista)].filter(Boolean).join('\n');};
+      L('🕞 Ingreso',f.ingreso||'PD'),L('💵 Costo',money(f.costo)),L('💰 Anticipo',money(f.anticipo)),L('☑️ Agenda',CURRENT_AGENDA)].filter(Boolean).join('\n');};
     var vpo=f.cabina_vpo==="Cabina 2"?CALLBL.cabina2:CALLBL.cabina1;
     var fc=fichaClient(p,true);   // cirugía: sin "procedimiento de interés"
     return [{cal:vpo,sum:sum,when:f.vpo_fecha+' '+f.vpo_hora+' (VPO)',desc:d('VPO',cirujano)+fc},
@@ -583,7 +595,7 @@ function buildClientEvents(f){
   var desc=['🔄 Tipo de paciente: '+(f.tipo_px||'—'),'🩺 Motivo de visita: '+(f.motivo||'—')].concat(extra.filter(Boolean)).concat([
     '🏥 Médico Titular: Dr. Miguel Soto','👤 Operativo: '+(f.medico||'—'),
     '🔘 Modalidad: '+(f.modalidad||'—'),(money(f.costo)?('💵 Costo: '+money(f.costo)):null),(f.msi?('💳 MSI: '+f.msi):null),
-    '❗️ Observaciones: '+(f.observaciones||'—'),((f.prospecta&&f.prospecta!=='NA')?('☑️ Prospecta: '+f.prospecta):null),((f.cierra&&f.cierra!=='NA')?('☑️ Cierra: '+f.cierra):null),'☑️ Agenda: '+(f.capturista||'—')].filter(Boolean)).join('\n')+fichaClient(p);
+    '❗️ Observaciones: '+(f.observaciones||'—'),((f.prospecta&&f.prospecta!=='NA')?('☑️ Prospecta: '+f.prospecta):null),((f.cierra&&f.cierra!=='NA')?('☑️ Cierra: '+f.cierra):null),'☑️ Agenda: '+(CURRENT_AGENDA||'—')].filter(Boolean)).join('\n')+fichaClient(p);
   return [{cal:TYPES[current].cal(f),sum:sum,when:(f.fecha||'?')+' '+(f.hora||'?')+' ('+(f.duracion||'?')+' min)',desc:desc}];
 }
 
