@@ -648,8 +648,10 @@ function clearPreview(){ previewEl.innerHTML='<div class="empty">Selecciona un p
 function allFields(){ var t=TYPES[current]; var a=t.common.concat(t.motivo,t.specific,t.tail); if(!t.surgery) a=a.concat(t.schedule); return a; }
 function markInvalid(missing){ [].forEach.call(formEl.querySelectorAll(".f"),function(d){d.classList.remove("invalid");}); missing.forEach(function(m){var d=formEl.querySelector('.f[data-for="'+m.k+'"]'); if(d)d.classList.add("invalid");}); }
 
+var SAVE_OVR=null;   // acumula autorizaciones (anticipo y/o empalme) entre intentos
 function doSave(override){
   if(!selectedPatient){ return; }
+  if(override==null) SAVE_OVR={}; else SAVE_OVR=Object.assign(SAVE_OVR||{}, override);
   var f=readForm(), fields=allFields();
   var missing=fields.filter(function(x){return x.req && !(x.fromPatient? (selectedPatient[x.k]) : f[x.k]);});
   markInvalid(missing);
@@ -660,17 +662,38 @@ function doSave(override){
   if(missing.length){ statusEl.className="status bad"; statusEl.innerHTML='🚫 Faltan '+missing.length+' campo(s) obligatorio(s).<ul>'+missing.map(function(m){return '<li>'+esc(m.l)+'</li>';}).join("")+'</ul>'; return; }
 
   // payload al servidor
-  var payload={ tipo:current, paciente:selectedPatient, campos:f, override:override||null, cotizacion:(current==="cirugia"?selectedCotizacion:null) };
+  var hasOvr=SAVE_OVR&&Object.keys(SAVE_OVR).length;
+  var payload={ tipo:current, paciente:selectedPatient, campos:f, override:(hasOvr?SAVE_OVR:null), cotizacion:(current==="cirugia"?selectedCotizacion:null) };
   saveBtn.disabled=true; saveBtn.textContent="Validando…";
-  statusEl.className="status info"; statusEl.style.display=""; statusEl.innerHTML=(override?"⏳ Agendando empalme autorizado…":"⏳ Validando y escribiendo en la agenda…");
+  statusEl.className="status info"; statusEl.style.display=""; statusEl.innerHTML=(hasOvr?"⏳ Procesando autorización…":"⏳ Validando y escribiendo en la agenda…");
   google.script.run.withSuccessHandler(function(res){
     saveBtn.disabled=false; saveBtn.textContent="Validar y agendar"; statusEl.style.display="";
     if(res.ok){
       statusEl.className="status ok";
       var tag = res.empalme ? ' <b>(empalme autorizado)</b>' : '';
-      statusEl.innerHTML='✅ Agendado'+tag+'. '+res.eventos.length+(res.eventos.length===1?' evento creado':' eventos vinculados creados')+' en Google Calendar.<ul>'+
+      var antTag = res.anticipo ? (' · 💳 '+esc(res.anticipo)) : '';
+      statusEl.innerHTML='✅ Agendado'+tag+antTag+'. '+res.eventos.length+(res.eventos.length===1?' evento creado':' eventos vinculados creados')+' en Google Calendar.<ul>'+
         res.eventos.map(function(e){return '<li>'+esc(e.calendar)+' · '+esc(e.when)+(e.empalmado?' ⚠️ empalme':'')+'</li>';}).join("")+'</ul>';
     } else if(res.faltantes){ statusEl.className="status bad"; statusEl.innerHTML='🚫 Faltan campos: '+res.faltantes.map(esc).join(", "); }
+    else if(res.error==='SIN_ANTICIPO'){
+      var a=res.anticipo||{};
+      var html='🚫 No se encontró un <b>anticipo verificado</b> en cobros para <b>'+esc(a.etiqueta||'')+'</b> (mínimo '+esc(money(a.monto))+'). No se guardó.'+(res.detalle?(' '+esc(res.detalle)):'');
+      if(res.canOverrideAnticipo){
+        html+='<div class="ovr"><div class="ovrt">⚠️ ¿Autorizas agendar SIN anticipo verificado? Indica quién lo autoriza:</div>'+
+          '<select id="antAuth"><option value="" selected disabled hidden>Autoriza…</option>'+
+          (CAT.autorizadores||[]).map(function(x){return "<option>"+esc(x)+"</option>";}).join("")+'</select>'+
+          '<input id="antMotivo" placeholder="Motivo (opcional)">'+
+          '<button type="button" id="antBtn">Agendar sin anticipo (autorizado)</button>'+
+          '<div class="ovrerr" id="antErr"></div></div>';
+      }
+      statusEl.className="status bad"; statusEl.innerHTML=html;
+      var ab=document.getElementById("antBtn");
+      if(ab){ ab.onclick=function(){
+        var auth=document.getElementById("antAuth").value;
+        if(!auth){ document.getElementById("antErr").textContent="Selecciona quién autoriza."; return; }
+        doSave({ anticipoAutorizadoPor:auth, anticipoMotivo:document.getElementById("antMotivo").value.trim() });
+      }; }
+    }
     else if(res.choques){
       var html='🚫 Choque de horario — no se guardó.<ul>'+res.choques.map(function(c){return '<li><b>'+esc(c.when)+'</b> en '+esc(c.calendar)+' choca con: '+c.hits.map(esc).join("; ")+'</li>';}).join("")+'</ul>';
       if(res.canOverride){
