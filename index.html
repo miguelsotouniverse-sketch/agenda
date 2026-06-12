@@ -475,6 +475,7 @@ function renderForm(){
     var d=document.getElementById("fld_duracion"); if(d&&!d.value) d.value=t.dur(readForm());
     if(current==="consulta"){
       var mot=document.getElementById("fld_motivo");
+      var modf=document.getElementById("fld_modalidad");
       var updConsulta=function(){
         var m=mot?mot.value:"";
         var revision=(m && m!=="Consulta de primera vez");   // subsecuente / revisión = sin venta
@@ -482,8 +483,13 @@ function renderForm(){
         // revisión: no hay venta → ocultar Prospecta/Cierra
         ["prospecta","cierra"].forEach(function(k){ var fd=formEl.querySelector('.f[data-for="'+k+'"]'); if(fd) fd.style.display=revision?"none":""; });
         if(d&&m) d.value=(m==="Consulta de primera vez")?60:30;
+        // Presencial: las fotos no aplican (solo en consulta virtual) → ocultar y limpiar
+        var pres=(modf && modf.value==="Presencial");
+        var ff=formEl.querySelector('.f[data-for="fotos"]');
+        if(ff){ ff.style.display=pres?"none":""; var fi=document.getElementById("fld_fotos"); if(pres && fi) fi.value="No aplica"; }
       };
       if(mot){ mot.addEventListener("change",updConsulta); }
+      if(modf){ modf.addEventListener("change",updConsulta); }
       updConsulta();
     }
     var fch=document.getElementById("fld_fecha"); if(fch) fch.addEventListener("change",loadBooked);
@@ -589,7 +595,11 @@ function buildClientEvents(f){
             {cal:CALLBL.cirugias,sum:sum,when:f.qx_fecha+' '+f.qx_hora+' (Cirugía)',desc:d('Cirugía',cirujano)+fc}];
   }
   var extra=[];
-  if(current==="consulta") extra=[L('⚪️ Procedimiento de interés',f.interes),L('📧 Correo',p.correo),L('📆 Nacimiento',p.nacimiento),L('📍 Residencia',p.residencia),L('📸 Fotos',f.fotos||'NA')];
+  if(current==="consulta"){
+    var etiqInt=(f.motivo&&f.motivo!=="Consulta de primera vez")?'⚪️ Procedimiento a revisar':'⚪️ Procedimiento de interés';
+    extra=[L(etiqInt,f.interes),L('📧 Correo',p.correo),L('📆 Nacimiento',p.nacimiento),L('📍 Residencia',p.residencia)];
+    if(f.modalidad!=="Presencial") extra.push(L('📸 Fotos',f.fotos||'NA'));   // fotos solo en virtual
+  }
   if(current==="inyectables") extra=[L('🏠 Cabina',f.cabina),L('⚪️ Procedimiento',f.procedimiento),L('⚫️ Área',f.area),L('😴 Anestesia',f.anestesia||'Local')];
   if(current==="energy") extra=[L('⚪️ Tratamiento',f.tratamiento),L('⚫️ Zona',f.zona),L('😴 Anestesia',f.anestesia)];
   var desc=['🔄 Tipo de paciente: '+(f.tipo_px||'—'),'🩺 Motivo de visita: '+(f.motivo||'—')].concat(extra.filter(Boolean)).concat([
