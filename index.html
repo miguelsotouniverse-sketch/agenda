@@ -370,8 +370,10 @@ function buildTypes(){
     {k:"cierra",l:"Cierra",t:"select",opt:["NA"].concat(CAPTURISTAS,MEDICOS)}
     // "Capturista/Agenda" ya no se captura: lo estampa el sistema con la cuenta verificada.
   ];
-  // Consulta: médico fijo (solo Dr. Miguel Soto) y sin MSI
-  var COMMON_CONSULTA=COMMON;   // consulta: operativo seleccionable (médico titular = Miguel implícito)
+  // Consulta Cirugía Plástica: el operativo SIEMPRE es el Dr. Miguel Soto (fijo) y sin MSI
+  var COMMON_CONSULTA=COMMON.map(function(x){ return x.k==="medico"
+    ? {k:"medico",l:"Operativo",t:"select",opt:["Dr. Miguel Soto"],val:"Dr. Miguel Soto",req:true}
+    : x; });
   // Medicina Estética: la atienden las doctoras (operativo limitado)
   var DOCTORAS_ESTETICA=['Dra. Laura Tagle','Dra. Samantha Contreras'];
   var COMMON_ESTETICA=COMMON.map(function(x){ return x.k==="medico"
