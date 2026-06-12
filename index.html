@@ -679,7 +679,9 @@ function doSave(override){
     } else if(res.faltantes){ statusEl.className="status bad"; statusEl.innerHTML='🚫 Faltan campos: '+res.faltantes.map(esc).join(", "); }
     else if(res.error==='SIN_ANTICIPO'){
       var a=res.anticipo||{};
-      var html='🚫 No se encontró un <b>anticipo verificado</b> en cobros para <b>'+esc(a.etiqueta||'')+'</b> (mínimo '+esc(money(a.monto))+'). No se guardó.'+(res.detalle?(' '+esc(res.detalle)):'');
+      var html=(res.agotado
+        ? '🚫 El anticipo de <b>'+esc(a.etiqueta||'')+'</b> ('+esc(money(a.monto))+') <b>ya fue usado en otra cita</b> — no se puede reutilizar.'
+        : '🚫 No se encontró un <b>anticipo verificado</b> en cobros para <b>'+esc(a.etiqueta||'')+'</b> (mínimo '+esc(money(a.monto))+'). No se guardó.')+(res.detalle?(' '+esc(res.detalle)):'');
       if(res.canOverrideAnticipo){
         html+='<div class="ovr"><div class="ovrt">⚠️ ¿Autorizas agendar SIN anticipo verificado? Indica quién lo autoriza:</div>'+
           '<select id="antAuth"><option value="" selected disabled hidden>Autoriza…</option>'+
