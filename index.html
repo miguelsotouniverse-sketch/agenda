@@ -337,6 +337,7 @@ function startApp(){
   google.script.run.withSuccessHandler(function(b){
     CAT=b.catalogs; CALLBL=b.cal;
     CAT.procedimientos = b.procedimientos || [];   // los procedimientos llegan aparte del catálogo
+    CAT.procedimientosEstetica = b.procedimientosEstetica || [];   // solo ED/faciales + FZ (medicina estética)
     document.getElementById("uchip").textContent = "👤 "+(CURRENT_AGENDA || b.usuario || "Sesión activa");
     buildTypes(); renderTabsInit(); renderForm();
   }).withFailureHandler(fail).getBootstrap();
@@ -347,12 +348,14 @@ window.startApp = startApp;
 var TYPES={};
 function buildTypes(){
   var MEDICOS=CAT.medicos, OPERATIVOS=(CAT.operativos||CAT.medicos), CAPTURISTAS=CAT.capturistas, ANEST=CAT.anestesia;
+  // Operativos de TRATAMIENTO (consulta/inyectables/energy/cirujano): sin Karen (ella es solo anestesia/VPA)
+  var OPERATIVOS_TRAT=OPERATIVOS.filter(function(o){return !/karen/i.test(o);});
   var SINO=["Sí","No aplica"], TIPO_PX=["Primera vez","Subsecuente"], MODAL=["Presencial","Virtual"];
   var COMMON=[
     {k:"tipo_px",l:"Tipo de paciente",t:"select",opt:TIPO_PX,req:true},
     {k:"nombre",l:"Nombre del paciente",t:"text",req:true,fromPatient:true},
     {k:"telefono",l:"Teléfono",t:"text",req:true,fromPatient:true},
-    {k:"medico",l:"Operativo",t:"select",opt:OPERATIVOS,req:true},
+    {k:"medico",l:"Operativo",t:"select",opt:OPERATIVOS_TRAT,req:true},
     {k:"modalidad",l:"Modalidad",t:"select",opt:MODAL,req:true}
   ];
   var SCHEDULE=[
@@ -394,10 +397,10 @@ function buildTypes(){
     estetica:{label:"Consulta Medicina Estética",icon:"✨",hint:"Atienden Dra. Tagle / Dra. Contreras. Cabina 1 ó 2.",
       cal:function(f){return f.cabina==="Cabina 2"?CALLBL.cabina2:CALLBL.cabina1;}, dur:function(f){return f.motivo==="Consulta de primera vez"?60:30;},
       common:COMMON_ESTETICA,
-      motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Consulta de primera vez","Consulta subsecuente"],req:true}],
+      motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Consulta de primera vez","Consulta subsecuente","Fibrosis Zero","PRUC"],req:true}],
       specific:[
         {k:"cabina",l:"Cabina",t:"select",opt:["Cabina 1","Cabina 2"],req:true},
-        {k:"interes",l:"Procedimiento de interés",t:"select",opt:(CAT.procedimientos||[])},
+        {k:"interes",l:"Procedimiento de interés",t:"select",opt:(CAT.procedimientosEstetica||[])},
         {k:"correo",l:"Correo electrónico",t:"text",fromPatient:true},
         {k:"nacimiento",l:"Fecha de nacimiento",t:"text",fromPatient:true},
         {k:"residencia",l:"Lugar de residencia",t:"text",fromPatient:true},
