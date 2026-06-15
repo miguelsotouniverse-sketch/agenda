@@ -25,6 +25,7 @@ function setupShim(){
     findCitas:         function(p){ return {a:'findCitas', p:p}; },
     cancelCita:        function(p){ return {a:'cancelCita', p:p}; },
     reschedule:        function(p){ return {a:'reschedule', p:p}; },
+    getDamianSheet:    function(){ return {a:'damianSheet', p:{}}; },
     getCotizaciones:   function(id,nombre){ return {a:'cotizaciones', p:{pacienteId:id, pacienteNombre:nombre}}; }
   };
   window.google = window.google || {};
@@ -321,13 +322,15 @@ function initGsi(){
       <div class="status" id="boardStatus"></div>
       <div id="boardWrap"><div class="empty">Elige una fecha y carga el día.</div></div>
       <div class="boardreport" id="boardReportBtns" style="display:none">
-        <label class="btn ghost" style="cursor:pointer">📥 Importar Dra. Damián (Excel)<input type="file" id="damianFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="importDamian(this)"></label>
+        <button type="button" class="btn ghost" id="damianBtn" onclick="importDamian()">📥 Importar Dra. Damián</button>
         <button type="button" class="btn ghost" id="damianClear" style="display:none;color:#a33a32" onclick="clearDamian()">✕ Quitar Dra. Damián</button>
         <span id="damianMsg" style="font-size:12px;color:var(--muted);align-self:center"></span>
         <button type="button" class="btn ghost" onclick="reportePantalla()">📋 Reporte en pantalla</button>
-        <button type="button" class="btn ghost" onclick="reportePDF()">📄 Imprimir / PDF</button>
-        <button type="button" class="btn ghost" onclick="reporteWhatsapp()">📲 Enviar por WhatsApp</button>
-        <button type="button" class="btn ghost" onclick="reporteEmail()">✉️ Enviar por correo</button>
+        <button type="button" class="btn ghost" onclick="reportePDF()">📄 PDF programación completa</button>
+        <button type="button" class="btn ghost" onclick="reporteWhatsapp()">📲 WhatsApp programación</button>
+        <button type="button" class="btn ghost" onclick="reporteEmail()">✉️ Correo</button>
+        <button type="button" class="btn ghost" onclick="reportePDFAnestesia()">🩺 PDF Anestesia (Dra. Karen)</button>
+        <button type="button" class="btn ghost" onclick="reporteWhatsappAnestesia()">📲 WhatsApp Anestesia</button>
       </div>
       <div id="boardReport"></div>
     </div>
@@ -915,16 +918,15 @@ function reporteEmail(){
   var fecha=fmtFecha(document.getElementById('boardDate').value);
   location.href='mailto:?subject='+encodeURIComponent('Reporte de confirmaciones — '+fecha)+'&body='+encodeURIComponent(reportText());
 }
-function reportePDF(){
-  if(!BOARD_ROWS.length && !DAMIAN_ROWS.length){ boardMsg('Primero carga un día.','bad'); return; }
-  var fecha=fmtFecha(document.getElementById('boardDate').value), rows=filasHomologadas();
+function abrirPDF(rows, titulo, subtitulo){
+  var fecha=fmtFecha(document.getElementById('boardDate').value);
   var c={Pendiente:0,Confirmada:0,'No Contesta':0,Cancelada:0,Reagendada:0};
   rows.forEach(function(r){ if(c[r.estatus]!==undefined)c[r.estatus]++; });
   var filas=rows.map(function(r){
     var pac=(r.externa?'🔹 ':'')+esc(r.paciente||'');
     return '<tr'+(r.externa?' style="background:#f3eef9"':'')+'><td>'+esc(r.horaIni)+(r.horaFin?('–'+esc(r.horaFin)):'')+'</td><td>'+pac+'</td><td>'+esc(r.linea)+'</td><td>'+esc(r.descripcion||'')+'</td><td>'+esc(r.area||'')+'</td><td>'+esc(r.operativo||'')+'</td><td class="e e-'+String(r.estatus).replace(/\s/g,'')+'">'+esc(r.estatus)+'</td></tr>';
   }).join('');
-  var html='<!doctype html><html><head><meta charset="utf-8"><title>Programación '+esc(fecha)+'</title><style>'+
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>'+esc(titulo)+' '+esc(fecha)+'</title><style>'+
     "@page{size:landscape;margin:14mm}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1c1a17;font-size:11px}"+
     'h1{font-size:16px;letter-spacing:.25em;text-transform:uppercase;margin:0;font-weight:500}.tag{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#9b958a;margin:3px 0 14px}'+
     '.mono{width:42px;height:42px;border:2px solid #0e0d0c;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;letter-spacing:.05em;float:right}'+
@@ -933,60 +935,58 @@ function reportePDF(){
     'td{padding:5px 7px;border-bottom:1px solid #e8e2d6}'+
     '.e{font-weight:700}.e-Confirmada{color:#3f6b4f}.e-NoContesta{color:#a33a32}.e-Pendiente{color:#9a7b3c}.e-Cancelada{color:#777}.e-Reagendada{color:#9a7b3c}'+
     '</style></head><body>'+
-    '<div class="mono">MS</div><h1>Programación del día</h1><div class="tag">Dr. Miguel Soto · Cirujano Plástico Certificado</div>'+
+    '<div class="mono">MS</div><h1>'+esc(titulo)+'</h1><div class="tag">'+esc(subtitulo)+'</div>'+
     '<div class="sum"><b>'+esc(fecha)+'</b> &nbsp; ✅ Confirmadas: '+c.Confirmada+' &nbsp; ⏳ Pendientes: '+c.Pendiente+' &nbsp; 📵 No contesta: '+c['No Contesta']+' &nbsp; ❌ Canceladas: '+c.Cancelada+' &nbsp; 🔁 Reagendadas: '+c.Reagendada+' &nbsp; 📊 Total: '+rows.length+'</div>'+
     '<table><thead><tr><th>Hora</th><th>Paciente</th><th>Línea de negocio</th><th>Descripción</th><th>Área</th><th>Operativo</th><th>Estatus</th></tr></thead><tbody>'+filas+'</tbody></table>'+
     '<script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script></body></html>';
   var w=window.open('','_blank'); w.document.write(html); w.document.close();
+}
+function reportePDF(){
+  if(!BOARD_ROWS.length && !DAMIAN_ROWS.length){ boardMsg('Primero carga un día.','bad'); return; }
+  abrirPDF(filasHomologadas(),'Programación del día','Dr. Miguel Soto · Cirujano Plástico Certificado');
+}
+/* Casos que requieren anestesióloga (General/Sedación o línea Anestesia/VPA) — para Dra. Karen García.
+   Incluye tus citas + las cirugías de la Dra. Damián con sedación/general (si importaste su hoja). */
+function filasAnestesia(){
+  var mias=BOARD_ROWS.filter(function(r){ return /general|sedaci/i.test(r.anestesia||'') || r.linea==='Anestesia'; })
+    .map(function(r){ return {horaIni:r.horaIni,horaFin:r.horaFin,paciente:r.paciente,linea:r.linea,
+      descripcion:(r.descripcion||'')+(r.anestesia?(' · Anestesia: '+r.anestesia):''),area:r.area,operativo:r.operativo,estatus:r.estatus,externa:false}; });
+  var dam=DAMIAN_ROWS.filter(function(r){ return /general|sedaci/i.test(r.anestesia||''); })
+    .map(function(r){ return {horaIni:r.horaIni,horaFin:r.horaFin,paciente:r.paciente,linea:r.linea,
+      descripcion:(r.descripcion||'')+(r.anestesia?(' · Anestesia: '+r.anestesia):''),area:'',operativo:r.operativo,estatus:r.estatus,externa:true}; });
+  return mias.concat(dam).sort(function(a,b){ return String(a.horaIni||'').localeCompare(String(b.horaIni||'')); });
+}
+function reportePDFAnestesia(){
+  var rows=filasAnestesia();
+  if(!rows.length){ boardMsg('No hay casos con anestesia General/Sedación en el día cargado.','bad'); return; }
+  abrirPDF(rows,'Programación de Anestesia','Dra. Karen García · Anestesióloga');
+}
+function reporteWhatsappAnestesia(){
+  var rows=filasAnestesia();
+  if(!rows.length){ boardMsg('No hay casos de anestesia en el día.','bad'); return; }
+  var fecha=fmtFecha(document.getElementById('boardDate').value);
+  var t='*Programación de Anestesia — '+fecha+'*\nDra. Karen García\n\n';
+  rows.forEach(function(r){ t+='• '+r.horaIni+(r.horaFin?('–'+r.horaFin):'')+' — '+r.paciente+' ('+(r.descripcion||r.linea)+')\n'; });
+  window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
 }
 
 /* =========================================================================
    IMPORTAR PROGRAMACIÓN DRA. DAMIÁN (Excel) y HOMOLOGAR en el PDF
    ========================================================================= */
 var DAMIAN_ROWS=[];
-function damHora(v){ var s=String(v==null?'':v).trim(); var m=s.match(/(\d{1,2})[:.h](\d{2})/); if(m) return (m[1].length<2?'0':'')+m[1]+':'+m[2]; m=s.match(/^(\d{1,2})$/); if(m) return (m[1].length<2?'0':'')+m[1]+':00'; return s; }
-function damFechaISO(v){
-  if(v instanceof Date){ return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0'); }
-  var s=String(v==null?'':v).trim(), m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
-  if(m){ var y=m[3].length===2?('20'+m[3]):m[3]; return y+'-'+String(+m[2]).padStart(2,'0')+'-'+String(+m[1]).padStart(2,'0'); }
-  m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?(m[1]+'-'+m[2]+'-'+m[3]):'';
-}
-function damNorm(s){ return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim(); }
-function importDamian(input){
-  var file=input.files&&input.files[0]; if(!file) return;
-  var msg=document.getElementById('damianMsg'); msg.textContent='Leyendo Excel…';
-  if(typeof XLSX==='undefined'){ msg.innerHTML='<span style="color:#a33a32">No cargó el lector de Excel. Refresca e intenta de nuevo.</span>'; return; }
-  var reader=new FileReader();
-  reader.onload=function(e){
-    try{
-      var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
-      var ws=wb.Sheets[wb.SheetNames[0]];
-      var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
-      var hi=-1,H={};
-      for(var r=0;r<rows.length;r++){
-        var nv=rows[r].map(damNorm);
-        if(nv.indexOf('inicio')>-1 && (nv.indexOf('nombre del paciente')>-1||nv.indexOf('nombre')>-1)){ hi=r; nv.forEach(function(h,ci){ if(h)H[h]=ci; }); break; }
-      }
-      if(hi<0){ msg.innerHTML='<span style="color:#a33a32">No reconocí los encabezados (Inicio, Nombre…). ¿Es la plantilla?</span>'; input.value=''; return; }
-      function col(){ for(var k=0;k<arguments.length;k++){ if(H[arguments[k]]!==undefined) return H[arguments[k]]; } return -1; }
-      var iF=col('fecha'),iIni=col('inicio'),iFin=col('termino','término'),iN=col('nombre del paciente','nombre'),iP=col('procedimiento'),iA=col('atiende'),iS=col('status','estatus');
-      var dia=document.getElementById('boardDate').value, out=[], fueraDeDia=0;
-      for(var r2=hi+1;r2<rows.length;r2++){
-        var row=rows[r2]; if(!row) continue;
-        var nombre=String(row[iN]||'').trim(); if(!nombre) continue;
-        var f=iF>-1?damFechaISO(row[iF]):'';
-        if(dia && f && f!==dia){ fueraDeDia++; continue; }
-        out.push({ horaIni:damHora(row[iIni]), horaFin:iFin>-1?damHora(row[iFin]):'', paciente:nombre,
-          descripcion:String(row[iP]||'').trim(), operativo:String(row[iA]||'').trim()||'Dra. Damián',
-          estatus:String(row[iS]||'').trim()||'—', linea:'Cirugía (Dra. Damián)', externa:true, fecha:f });
-      }
-      DAMIAN_ROWS=out; input.value='';
-      document.getElementById('damianClear').style.display='';
-      if(!out.length){ msg.innerHTML='<span style="color:#9a7b3c">El Excel no trae citas para '+esc(dia||'el día cargado')+(fueraDeDia?(' ('+fueraDeDia+' eran de otra fecha)'):'')+'. Revisa la columna Fecha.</span>'; }
-      else { msg.innerHTML='<b style="color:var(--good)">✓ '+out.length+' cita(s) de Dra. Damián</b> — usa “Reporte en pantalla” o “Imprimir / PDF” para verlas homologadas.'; }
-    }catch(err){ msg.innerHTML='<span style="color:#a33a32">Error leyendo el Excel: '+esc(err.message||err)+'</span>'; input.value=''; }
-  };
-  reader.readAsArrayBuffer(file);
+function importDamian(){
+  var msg=document.getElementById('damianMsg'), btn=document.getElementById('damianBtn');
+  msg.textContent='Leyendo la hoja de la Dra. Damián…'; if(btn) btn.disabled=true;
+  google.script.run.withSuccessHandler(function(res){
+    if(btn) btn.disabled=false;
+    if(!res||!res.ok){ msg.innerHTML='<span style="color:#a33a32">'+esc((res&&res.error)||'No se pudo leer la hoja.')+'</span>'; return; }
+    DAMIAN_ROWS=(res.citas||[]).map(function(c){ return {horaIni:c.horaIni,horaFin:c.horaFin,paciente:c.paciente,descripcion:c.descripcion,anestesia:c.anestesia||'',operativo:c.operativo||'Dra. Damián',estatus:c.estatus||'—',linea:'Cirugía (Dra. Damián)',externa:true}; });
+    document.getElementById('damianClear').style.display='';
+    var dia=document.getElementById('boardDate').value;
+    if(!DAMIAN_ROWS.length){ msg.innerHTML='<span style="color:#9a7b3c">La hoja no trae citas.</span>'; return; }
+    var aviso = (res.fecha && dia && res.fecha!==dia) ? (' <span style="color:#a33a32">⚠️ ojo: la hoja es del '+esc(fmtFecha(res.fecha))+' y cargaste el '+esc(fmtFecha(dia))+'</span>') : '';
+    msg.innerHTML='<b style="color:var(--good)">✓ '+DAMIAN_ROWS.length+' cita(s) de Dra. Damián</b>'+(res.fecha?(' (hoja del '+esc(fmtFecha(res.fecha))+')'):'')+aviso+' — usa “Reporte en pantalla” o “Imprimir / PDF”.';
+  }).withFailureHandler(function(err){ if(btn) btn.disabled=false; msg.innerHTML='<span style="color:#a33a32">Error: '+esc((err&&err.message)||err)+'</span>'; }).getDamianSheet();
 }
 function clearDamian(){ DAMIAN_ROWS=[]; var b=document.getElementById('damianClear'); if(b)b.style.display='none'; var m=document.getElementById('damianMsg'); if(m)m.textContent=''; }
 /* Combina tus citas + las de Dra. Damián, ordenadas por hora (para los reportes/PDF) */
@@ -1105,7 +1105,6 @@ function boardReag(i){
   go(null);
 }
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" onload="initGsi()" async defer></script>
 </body>
 </html>
