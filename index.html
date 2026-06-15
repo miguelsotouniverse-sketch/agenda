@@ -410,10 +410,10 @@ function buildTypes(){
     : x; });
   var TAIL_NO_MSI=TAIL.filter(function(x){ return x.k!=="msi"; });
   TYPES={
-    consulta:{label:"Consulta Cirugía Plástica",icon:"🩺",hint:"Primera vez o subsecuente. Agenda del Dr. Soto.",
-      cal:function(){return CALLBL.consulta;}, dur:function(f){return f.motivo==="Consulta de primera vez"?60:30;},
+    consulta:{label:"Consulta Cirugía Plástica",icon:"🩺",hint:"Valoración o revisión. Agenda del Dr. Soto.",
+      cal:function(){return CALLBL.consulta;}, dur:function(f){return /valoraci|primera vez/i.test(f.motivo||'')?60:30;},
       common:COMMON_CONSULTA,
-      motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Consulta de primera vez","Consulta subsecuente"],req:true}],
+      motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Valoración Cirugía Plástica","Revisión Cirugía Plástica"],req:true}],
       specific:[
         {k:"interes",l:"Procedimiento de interés",t:"select",opt:(CAT.procedimientos||[])},
         {k:"correo",l:"Correo electrónico",t:"text",fromPatient:true},
@@ -422,7 +422,7 @@ function buildTypes(){
         {k:"fotos",l:"Fotos",t:"select",opt:SINO}
       ], schedule:SCHEDULE, tail:TAIL_NO_MSI},
     estetica:{label:"Consulta Medicina Estética",icon:"✨",hint:"Atienden Dra. Tagle / Dra. Contreras. Cabina 1 ó 2.",
-      cal:function(f){return f.cabina==="Cabina 2"?CALLBL.cabina2:CALLBL.cabina1;}, dur:function(f){return f.motivo==="Consulta de primera vez"?60:30;},
+      cal:function(f){return f.cabina==="Cabina 2"?CALLBL.cabina2:CALLBL.cabina1;}, dur:function(f){return /valoraci|primera vez/i.test(f.motivo||'')?60:30;},
       common:COMMON_ESTETICA,
       motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Consulta de primera vez","Consulta subsecuente","Fibrosis Zero","PRUC"],req:true}],
       specific:[
@@ -525,11 +525,12 @@ function renderForm(){
       var modf=document.getElementById("fld_modalidad");
       var updConsulta=function(){
         var m=mot?mot.value:"";
-        var revision=(m && m!=="Consulta de primera vez");   // subsecuente / revisión = sin venta
+        var primera=/valoraci|primera vez/i.test(m);
+        var revision=(m && !primera);   // revisión / subsecuente = sin venta
         var lb=formEl.querySelector('.f[data-for="interes"] label'); if(lb) lb.textContent=revision?"Procedimiento a revisar":"Procedimiento de interés";
         // revisión: no hay venta → ocultar Prospecta/Cierra
         ["prospecta","cierra"].forEach(function(k){ var fd=formEl.querySelector('.f[data-for="'+k+'"]'); if(fd) fd.style.display=revision?"none":""; });
-        if(d&&m) d.value=(m==="Consulta de primera vez")?60:30;
+        if(d&&m) d.value=primera?60:30;
         // Presencial: las fotos no aplican (solo en consulta virtual) → ocultar y limpiar
         var pres=(modf && modf.value==="Presencial");
         var ff=formEl.querySelector('.f[data-for="fotos"]');
@@ -654,7 +655,7 @@ function buildClientEvents(f){
   }
   var extra=[];
   if(current==="consulta"||current==="estetica"){
-    var etiqInt=(f.motivo&&f.motivo!=="Consulta de primera vez")?'⚪️ Procedimiento a revisar':'⚪️ Procedimiento de interés';
+    var etiqInt=(/valoraci|primera vez/i.test(f.motivo||''))?'⚪️ Procedimiento de interés':'⚪️ Procedimiento a revisar';
     if(current==="estetica") extra.push(L('🏠 Cabina',f.cabina));
     extra=extra.concat([L(etiqInt,f.interes),L('📧 Correo',p.correo),L('📆 Nacimiento',p.nacimiento),L('📍 Residencia',p.residencia)]);
     if(f.modalidad!=="Presencial") extra.push(L('📸 Fotos',f.fotos||'NA'));   // fotos solo en virtual
