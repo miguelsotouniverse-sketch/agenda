@@ -850,32 +850,51 @@ function loadBoard(){
   google.script.run.withSuccessHandler(function(res){
     if(!res||!res.ok){ wrap.innerHTML='<div class="empty">No se pudo cargar ('+esc((res&&res.error)||'?')+').</div>'; return; }
     BOARD_ROWS=res.filas||[];
-    renderBoard(BOARD_ROWS);
+    renderBoard();
   }).withFailureHandler(function(err){ wrap.innerHTML='<div class="empty">Error: '+esc((err&&err.message)||err)+'.</div>'; }).getDayBoard(d);
 }
 
-function renderBoard(rows){
+function renderBoard(){
   var wrap=document.getElementById('boardWrap');
-  if(!rows.length){ wrap.innerHTML='<div class="empty">No hay citas programadas ese día.</div>'; document.getElementById('boardStats').innerHTML=''; return; }
-  var lc={'Consulta':'lc-cons','Consulta estética':'lc-iny','Cirugía':'lc-cir','Cirugía (VPO)':'lc-cir','Anestesia':'lc-anes','Energy Devices':'lc-energy','Inyectables':'lc-iny'};
+  // mezcla tus citas (con controles) + las de la Dra. Damián (solo lectura), ordenadas por hora
+  var combined=BOARD_ROWS.map(function(r,i){return {r:r,i:i,ext:false};})
+    .concat(DAMIAN_ROWS.map(function(r){return {r:r,i:-1,ext:true};}))
+    .sort(function(a,b){return String(a.r.horaIni||'').localeCompare(String(b.r.horaIni||''));});
+  if(!combined.length){ wrap.innerHTML='<div class="empty">No hay citas programadas ese día.</div>'; document.getElementById('boardStats').innerHTML=''; document.getElementById('boardReportBtns').style.display=(BOARD_ROWS.length||DAMIAN_ROWS.length)?'flex':'none'; return; }
+  var lc={'Consulta':'lc-cons','Consulta estética':'lc-iny','Cirugía':'lc-cir','Cirugía (VPO)':'lc-cir','Cirugía (Dra. Damián)':'lc-cir','Anestesia':'lc-anes','Energy Devices':'lc-energy','Inyectables':'lc-iny'};
   var h='<table class="boardtable"><thead><tr><th>Hora</th><th>Paciente</th><th>Línea de negocio</th><th>Descripción</th><th>Área</th><th>Operativo</th><th>Estatus</th><th>WhatsApp</th><th>Acciones</th></tr></thead><tbody>';
-  rows.forEach(function(r,i){
-    h+='<tr>'+
-      '<td class="nowrap">'+esc(r.horaIni)+'–'+esc(r.horaFin)+'</td>'+
-      '<td><b>'+esc(r.paciente||'—')+'</b>'+(r.telefono?('<div class="sub">'+esc(r.telefono)+'</div>'):'')+'</td>'+
-      '<td><span class="lchip '+(lc[r.linea]||'')+'">'+esc(r.linea)+'</span></td>'+
-      '<td>'+esc(r.descripcion||'—')+(r.autorizo?('<div class="sub" style="color:var(--warn);font-weight:600">⚠️ Empalme · autorizó: '+esc(r.autorizo)+'</div>'):(r.empalme?'<div class="sub" style="color:var(--warn);font-weight:600">⚠️ Empalme autorizado</div>':''))+'</td>'+
-      '<td>'+esc(r.area||'—')+'</td>'+
-      '<td>'+esc(r.operativo||'—')+'</td>'+
-      '<td>'+statusSelect(i,r.estatus)+'</td>'+
-      '<td>'+(r.telefono?('<button type="button" class="btn wa" onclick="waPatient('+i+')">WhatsApp</button>'):'<span class="sub">sin tel.</span>')+'</td>'+
-      '<td class="nowrap"><button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px" title="Reagendar" onclick="boardReag('+i+')">↻</button> <button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px;color:#a33a32" title="Cancelar" onclick="boardCancel('+i+')">✕</button></td>'+
-    '</tr>';
+  combined.forEach(function(it){
+    var r=it.r, i=it.i;
+    if(it.ext){
+      h+='<tr style="background:#f3eef9">'+
+        '<td class="nowrap">'+esc(r.horaIni)+(r.horaFin?('–'+esc(r.horaFin)):'')+'</td>'+
+        '<td><b>🔹 '+esc(r.paciente||'—')+'</b><div class="sub">Dra. Damián</div></td>'+
+        '<td><span class="lchip lc-cir">'+esc(r.linea)+'</span></td>'+
+        '<td>'+esc(r.descripcion||'—')+'</td>'+
+        '<td>—</td>'+
+        '<td>'+esc(r.operativo||'Dra. Damián')+'</td>'+
+        '<td><span class="lchip">'+esc(r.estatus||'—')+'</span></td>'+
+        '<td><span class="sub">—</span></td>'+
+        '<td><span class="sub">externa</span></td>'+
+      '</tr>';
+    } else {
+      h+='<tr>'+
+        '<td class="nowrap">'+esc(r.horaIni)+'–'+esc(r.horaFin)+'</td>'+
+        '<td><b>'+esc(r.paciente||'—')+'</b>'+(r.telefono?('<div class="sub">'+esc(r.telefono)+'</div>'):'')+'</td>'+
+        '<td><span class="lchip '+(lc[r.linea]||'')+'">'+esc(r.linea)+'</span></td>'+
+        '<td>'+esc(r.descripcion||'—')+(r.autorizo?('<div class="sub" style="color:var(--warn);font-weight:600">⚠️ Empalme · autorizó: '+esc(r.autorizo)+'</div>'):(r.empalme?'<div class="sub" style="color:var(--warn);font-weight:600">⚠️ Empalme autorizado</div>':''))+'</td>'+
+        '<td>'+esc(r.area||'—')+'</td>'+
+        '<td>'+esc(r.operativo||'—')+'</td>'+
+        '<td>'+statusSelect(i,r.estatus)+'</td>'+
+        '<td>'+(r.telefono?('<button type="button" class="btn wa" onclick="waPatient('+i+')">WhatsApp</button>'):'<span class="sub">sin tel.</span>')+'</td>'+
+        '<td class="nowrap"><button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px" title="Reagendar" onclick="boardReag('+i+')">↻</button> <button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px;color:#a33a32" title="Cancelar" onclick="boardCancel('+i+')">✕</button></td>'+
+      '</tr>';
+    }
   });
   h+='</tbody></table>';
   wrap.innerHTML=h;
   document.getElementById('boardReportBtns').style.display='flex';
-  renderStats(rows);
+  renderStats();
 }
 function statusSelect(i,val){
   var opts=['Pendiente','Confirmada','No Contesta','Cancelada','Reagendada'];
@@ -889,10 +908,11 @@ function onStatus(i,sel){
   google.script.run.withSuccessHandler(function(res){
     sel.disabled=false;
     if(!res||!res.ok){ alert('No se pudo guardar el estatus: '+((res&&res.error)||'?')); sel.value=old; sel.className='stsel st-'+old.replace(/\s/g,''); return; }
-    r.estatus=nuevo; renderStats(BOARD_ROWS);
+    r.estatus=nuevo; renderStats();
   }).withFailureHandler(function(err){ sel.disabled=false; sel.value=old; sel.className='stsel st-'+old.replace(/\s/g,''); alert('Error: '+((err&&err.message)||err)); }).setStatus(r.calId,r.eventId,nuevo);
 }
-function renderStats(rows){
+function renderStats(){
+  var rows=BOARD_ROWS.concat(DAMIAN_ROWS);
   var c={Pendiente:0,Confirmada:0,'No Contesta':0,Cancelada:0,Reagendada:0};
   rows.forEach(function(r){ if(c[r.estatus]!==undefined)c[r.estatus]++; });
   function chip(l,n,k){ return '<div class="bstat bs-'+k+'"><div class="bn">'+n+'</div><div class="bl">'+l+'</div></div>'; }
@@ -1011,12 +1031,13 @@ function importDamian(){
     DAMIAN_ROWS=(res.citas||[]).map(function(c){ return {horaIni:c.horaIni,horaFin:c.horaFin,paciente:c.paciente,descripcion:c.descripcion,anestesia:c.anestesia||'',operativo:c.operativo||'Dra. Damián',estatus:c.estatus||'—',linea:'Cirugía (Dra. Damián)',externa:true}; });
     document.getElementById('damianClear').style.display='';
     var dia=document.getElementById('boardDate').value;
-    if(!DAMIAN_ROWS.length){ msg.innerHTML='<span style="color:#9a7b3c">La hoja no trae citas.</span>'; return; }
+    if(!DAMIAN_ROWS.length){ msg.innerHTML='<span style="color:#9a7b3c">La hoja no trae citas.</span>'; renderBoard(); return; }
     var aviso = (res.fecha && dia && res.fecha!==dia) ? (' <span style="color:#a33a32">⚠️ ojo: la hoja es del '+esc(fmtFecha(res.fecha))+' y cargaste el '+esc(fmtFecha(dia))+'</span>') : '';
-    msg.innerHTML='<b style="color:var(--good)">✓ '+DAMIAN_ROWS.length+' cita(s) de Dra. Damián</b>'+(res.fecha?(' (hoja del '+esc(fmtFecha(res.fecha))+')'):'')+aviso+' — usa “Reporte en pantalla” o “Imprimir / PDF”.';
+    msg.innerHTML='<b style="color:var(--good)">✓ '+DAMIAN_ROWS.length+' cita(s) de Dra. Damián</b>'+(res.fecha?(' (hoja del '+esc(fmtFecha(res.fecha))+')'):'')+aviso+' — ya aparecen en la tabla, ordenadas por hora.';
+    renderBoard();
   }).withFailureHandler(function(err){ if(btn) btn.disabled=false; msg.innerHTML='<span style="color:#a33a32">Error: '+esc((err&&err.message)||err)+'</span>'; }).getDamianSheet();
 }
-function clearDamian(){ DAMIAN_ROWS=[]; var b=document.getElementById('damianClear'); if(b)b.style.display='none'; var m=document.getElementById('damianMsg'); if(m)m.textContent=''; }
+function clearDamian(){ DAMIAN_ROWS=[]; var b=document.getElementById('damianClear'); if(b)b.style.display='none'; var m=document.getElementById('damianMsg'); if(m)m.textContent=''; if(typeof BOARD_ROWS!=='undefined' && document.getElementById('boardWrap') && document.getElementById('boardWrap').querySelector('table')) renderBoard(); }
 /* Combina tus citas + las de Dra. Damián, ordenadas por hora (para los reportes/PDF) */
 function filasHomologadas(){
   var mias=BOARD_ROWS.map(function(r){ return {horaIni:r.horaIni,horaFin:r.horaFin,paciente:r.paciente,linea:r.linea,descripcion:r.descripcion,area:r.area,operativo:r.operativo,estatus:r.estatus,externa:false}; });
