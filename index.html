@@ -966,28 +966,39 @@ function reporteEmail(){
   var fecha=fmtFecha(document.getElementById('boardDate').value);
   location.href='mailto:?subject='+encodeURIComponent('Reporte de confirmaciones — '+fecha)+'&body='+encodeURIComponent(reportText());
 }
+/* Limpia texto para el PDF: corta metadatos pegados y quita emojis (jsPDF no los dibuja) */
+function limpiaPDF(s){
+  s=String(s==null?'':s);
+  s=s.split(/\s*(?:📅|🗓|⏰|🕞|💵|💳|☑️|❗️|📆|🩺|🔄|Fecha de cita|Hora:|Costo|MSI|Observaciones|Prospecta:|Cierra:|Agenda:)/u)[0];
+  s=s.replace(/[\u{1F000}-\u{1FAFF}\u{2190}-\u{2BFF}\u{2600}-\u{27BF}️•]/gu,'');
+  return s.replace(/\s+/g,' ').trim();
+}
+/* Genera y DESCARGA un PDF (sin diálogo de impresión) con jsPDF + autotable */
+function descargarPDF(titulo, sub, head, body, filename){
+  if(!(window.jspdf&&window.jspdf.jsPDF)){ alert('No cargó el generador de PDF. Recarga la página (Cmd+Shift+R) e intenta.'); return; }
+  var doc=new window.jspdf.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text(titulo,14,15);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(120);
+  var subLines=doc.splitTextToSize(sub,268); doc.text(subLines,14,21);
+  doc.setTextColor(0);
+  doc.autoTable({ head:[head], body:body, startY:21+subLines.length*4+2,
+    styles:{fontSize:8,cellPadding:1.5,overflow:'linebreak',valign:'middle'},
+    headStyles:{fillColor:[14,13,12],textColor:255,fontSize:7.5},
+    alternateRowStyles:{fillColor:[248,247,241]}, margin:{left:14,right:14} });
+  doc.save(filename);
+}
 function abrirPDF(rows, titulo, subtitulo){
   var fecha=fmtFecha(document.getElementById('boardDate').value);
   var c={Pendiente:0,Confirmada:0,'No Contesta':0,Cancelada:0,Reagendada:0};
   rows.forEach(function(r){ if(c[r.estatus]!==undefined)c[r.estatus]++; });
-  var filas=rows.map(function(r){
-    var pac=(r.externa?'🔹 ':'')+esc(r.paciente||'');
-    return '<tr'+(r.externa?' style="background:#f3eef9"':'')+'><td>'+esc(r.horaIni)+(r.horaFin?('–'+esc(r.horaFin)):'')+'</td><td>'+pac+'</td><td>'+esc(r.linea)+'</td><td>'+esc(r.descripcion||'')+'</td><td>'+esc(r.area||'')+'</td><td>'+esc(r.operativo||'')+'</td><td class="e e-'+String(r.estatus).replace(/\s/g,'')+'">'+esc(r.estatus)+'</td></tr>';
-  }).join('');
-  var html='<!doctype html><html><head><meta charset="utf-8"><title>'+esc(titulo)+' '+esc(fecha)+'</title><style>'+
-    "@page{size:landscape;margin:14mm}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1c1a17;font-size:11px}"+
-    'h1{font-size:16px;letter-spacing:.25em;text-transform:uppercase;margin:0;font-weight:500}.tag{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#9b958a;margin:3px 0 14px}'+
-    '.mono{width:42px;height:42px;border:2px solid #0e0d0c;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;letter-spacing:.05em;float:right}'+
-    '.sum{margin:0 0 12px;font-size:11px}.sum b{margin-right:14px}'+
-    'table{width:100%;border-collapse:collapse}th{background:#0e0d0c;color:#fff;text-align:left;padding:6px 7px;font-size:9px;text-transform:uppercase;letter-spacing:.05em}'+
-    'td{padding:5px 7px;border-bottom:1px solid #e8e2d6}'+
-    '.e{font-weight:700}.e-Confirmada{color:#3f6b4f}.e-NoContesta{color:#a33a32}.e-Pendiente{color:#9a7b3c}.e-Cancelada{color:#777}.e-Reagendada{color:#9a7b3c}'+
-    '</style></head><body>'+
-    '<div class="mono">MS</div><h1>'+esc(titulo)+'</h1><div class="tag">'+esc(subtitulo)+'</div>'+
-    '<div class="sum"><b>'+esc(fecha)+'</b> &nbsp; ✅ Confirmadas: '+c.Confirmada+' &nbsp; ⏳ Pendientes: '+c.Pendiente+' &nbsp; 📵 No contesta: '+c['No Contesta']+' &nbsp; ❌ Canceladas: '+c.Cancelada+' &nbsp; 🔁 Reagendadas: '+c.Reagendada+' &nbsp; 📊 Total: '+rows.length+'</div>'+
-    '<table><thead><tr><th>Hora</th><th>Paciente</th><th>Línea de negocio</th><th>Descripción</th><th>Área</th><th>Operativo</th><th>Estatus</th></tr></thead><tbody>'+filas+'</tbody></table>'+
-    '<script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script></body></html>';
-  var w=window.open('','_blank'); w.document.write(html); w.document.close();
+  var head=['Hora','Paciente','Línea de negocio','Descripción','Área','Operativo','Estatus'];
+  var body=rows.map(function(r){ return [
+    (r.horaIni||'')+(r.horaFin?('-'+r.horaFin):''),
+    (r.externa?'(Damián) ':'')+limpiaPDF(r.paciente),
+    limpiaPDF(r.linea), limpiaPDF(r.descripcion), limpiaPDF(r.area), limpiaPDF(r.operativo), limpiaPDF(r.estatus)
+  ]; });
+  var sub=subtitulo+'   |   '+fecha+'   |   Total: '+rows.length+'   Confirmadas: '+c.Confirmada+'   Pendientes: '+c.Pendiente+'   No contesta: '+c['No Contesta']+'   Canceladas: '+c.Cancelada+'   Reagendadas: '+c.Reagendada;
+  descargarPDF(titulo, sub, head, body, titulo.replace(/[^\w]+/g,'_')+'_'+(document.getElementById('boardDate').value||'')+'.pdf');
 }
 function reportePDF(){
   if(!BOARD_ROWS.length && !DAMIAN_ROWS.length){ boardMsg('Primero carga un día.','bad'); return; }
@@ -1110,20 +1121,15 @@ function renderAsistStats(){
 function asistenciaPDF(){
   if(!ASIST_ROWS.length) return;
   var fecha=fmtFecha(document.getElementById('asistDate').value);
-  var filas=ASIST_ROWS.map(function(r){
-    return '<tr'+(r.externa?' style="background:#f3eef9"':'')+'><td>'+esc(r.horaIni)+'–'+esc(r.horaFin)+'</td><td>'+esc(r.paciente||'')+'</td><td>'+esc(r.linea)+'</td><td>'+esc(r.descripcion||'')+'</td><td>'+esc(r.titular||'')+'</td><td>'+esc(r.operativo||'')+'</td><td>'+esc(r.prospecta||'')+'</td><td>'+esc(r.cierra||'')+'</td><td style="text-align:center;font-weight:700">'+(r.asistio?'✓':'☐')+'</td><td>'+esc(r.comentario||'')+'</td></tr>';
-  }).join('');
+  var head=['Hora','Paciente','Línea','Descripción','Médico titular','Operativo','Prospecta','Cierra','Asistió','Comentario'];
+  var body=ASIST_ROWS.map(function(r){ return [
+    (r.horaIni||'')+(r.horaFin?('-'+r.horaFin):''),
+    (r.externa?'(Damián) ':'')+limpiaPDF(r.paciente),
+    limpiaPDF(r.linea), limpiaPDF(r.descripcion), limpiaPDF(r.titular), limpiaPDF(r.operativo),
+    limpiaPDF(r.prospecta), limpiaPDF(r.cierra), (r.asistio?'Sí':''), limpiaPDF(r.comentario)
+  ]; });
   var asis=ASIST_ROWS.filter(function(r){return r.asistio;}).length;
-  var html='<!doctype html><html><head><meta charset="utf-8"><title>Asistencia '+esc(fecha)+'</title><style>'+
-    "@page{size:landscape;margin:10mm}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1c1a17;font-size:10px}"+
-    'h1{font-size:16px;letter-spacing:.25em;text-transform:uppercase;margin:0;font-weight:500}.tag{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#9b958a;margin:3px 0 14px}'+
-    '.mono{width:42px;height:42px;border:2px solid #0e0d0c;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;float:right}'+
-    '.sum{margin:0 0 12px;font-size:11px}table{width:100%;border-collapse:collapse}th{background:#0e0d0c;color:#fff;text-align:left;padding:5px 6px;font-size:8.5px;text-transform:uppercase}td{padding:5px 6px;border-bottom:1px solid #e8e2d6}'+
-    '</style></head><body><div class="mono">MS</div><h1>Registro de asistencia</h1><div class="tag">Dr. Miguel Soto · Cirujano Plástico Certificado</div>'+
-    '<div class="sum"><b>'+esc(fecha)+'</b> &nbsp; Asistieron: '+asis+' / '+ASIST_ROWS.length+'</div>'+
-    '<table><thead><tr><th>Hora</th><th>Paciente</th><th>Línea</th><th>Descripción</th><th>Médico titular</th><th>Operativo</th><th>Prospecta</th><th>Cierra</th><th>Asistió</th><th>Comentario</th></tr></thead><tbody>'+filas+'</tbody></table>'+
-    '<script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script></body></html>';
-  var w=window.open('','_blank'); w.document.write(html); w.document.close();
+  descargarPDF('Registro de asistencia', 'Dr. Miguel Soto   |   '+fecha+'   |   Asistieron: '+asis+' / '+ASIST_ROWS.length, head, body, 'Asistencia_'+(document.getElementById('asistDate').value||'')+'.pdf');
 }
 
 /* =========================================================================
@@ -1234,6 +1240,8 @@ function boardReag(i){
   go(null);
 }
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" onload="initGsi()" async defer></script>
 <!-- ============================================================
      MS UNIVERSE · Lanzador minimalista entre apps
