@@ -26,6 +26,7 @@ function setupShim(){
     cancelCita:        function(p){ return {a:'cancelCita', p:p}; },
     reschedule:        function(p){ return {a:'reschedule', p:p}; },
     getDamianSheet:    function(){ return {a:'damianSheet', p:{}}; },
+    setAttendance:     function(p){ return {a:'setAttendance', p:p}; },
     getCotizaciones:   function(id,nombre){ return {a:'cotizaciones', p:{pacienteId:id, pacienteNombre:nombre}}; }
   };
   window.google = window.google || {};
@@ -261,6 +262,7 @@ function initGsi(){
     <button type="button" class="navbtn active" id="navAgendar" onclick="showView('agendar')">📝 Agendar</button>
     <button type="button" class="navbtn" id="navBoard" onclick="showView('board')">✅ Confirmaciones del día</button>
     <button type="button" class="navbtn" id="navCitas" onclick="showView('citas')">🔧 Buscar / editar cita</button>
+    <button type="button" class="navbtn" id="navAsist" onclick="showView('asistencia')">🗒️ Asistencia del día</button>
   </div>
 
   <div id="viewAgendar">
@@ -348,6 +350,27 @@ function initGsi(){
       <div id="citaSelected"></div>
       <div class="status" id="citaStatus"></div>
       <div id="citaList"></div>
+    </div>
+  </div>
+
+  <div id="viewAsistencia" style="display:none">
+    <div class="card">
+      <div class="boardhead">
+        <div>
+          <h2 style="margin:0">Registro de asistencia del día</h2>
+          <div class="hint">Marca quién asistió y agrega comentarios. Se guarda en la cita automáticamente.</div>
+        </div>
+        <div class="boarddate">
+          <input type="date" id="asistDate">
+          <button type="button" class="btn primary" onclick="loadAsistencia()">Cargar día</button>
+        </div>
+      </div>
+      <div class="boardstats" id="asistStats"></div>
+      <div class="status" id="asistStatus"></div>
+      <div id="asistWrap"><div class="empty">Elige una fecha y carga el día.</div></div>
+      <div class="boardreport" id="asistBtns" style="display:none">
+        <button type="button" class="btn ghost" onclick="asistenciaPDF()">📄 Imprimir registro / PDF</button>
+      </div>
     </div>
   </div>
 </div>
@@ -795,13 +818,14 @@ function fail(err){ var st=document.getElementById("status"); if(st){ st.classNa
    ========================================================================= */
 var BOARD_ROWS=[];
 function showView(which){
-  var map={agendar:'viewAgendar',board:'viewBoard',citas:'viewCitas'};
-  var nav={agendar:'navAgendar',board:'navBoard',citas:'navCitas'};
+  var map={agendar:'viewAgendar',board:'viewBoard',citas:'viewCitas',asistencia:'viewAsistencia'};
+  var nav={agendar:'navAgendar',board:'navBoard',citas:'navCitas',asistencia:'navAsist'};
   Object.keys(map).forEach(function(k){
     var v=document.getElementById(map[k]); if(v) v.style.display=(k===which)?'block':'none';
     var n=document.getElementById(nav[k]); if(n) n.classList.toggle('active',k===which);
   });
   if(which==='board'){ var d=document.getElementById('boardDate'); if(d&&!d.value) d.value=todayStr(); }
+  if(which==='asistencia'){ var da=document.getElementById('asistDate'); if(da&&!da.value) da.value=todayStr(); }
 }
 function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtFecha(d){
@@ -1002,6 +1026,72 @@ function filasHomologadas(){
 }
 
 /* =========================================================================
+   REGISTRO DE ASISTENCIA DEL DÍA (interactivo, se guarda en la cita)
+   ========================================================================= */
+var ASIST_ROWS=[];
+function asistMsg(t,k){ var el=document.getElementById('asistStatus'); if(el){ el.className='status '+(k||'info'); el.innerHTML=t; } }
+function loadAsistencia(){
+  var d=document.getElementById('asistDate').value;
+  if(!d){ asistMsg('Elige una fecha.','bad'); return; }
+  var wrap=document.getElementById('asistWrap'); wrap.innerHTML='<div class="empty">Cargando…</div>';
+  asistMsg('','info'); document.getElementById('asistBtns').style.display='none'; document.getElementById('asistStats').innerHTML='';
+  google.script.run.withSuccessHandler(function(res){
+    if(!res||!res.ok){ wrap.innerHTML='<div class="empty">No se pudo cargar ('+esc((res&&res.error)||'?')+').</div>'; return; }
+    ASIST_ROWS=res.filas||[]; renderAsistencia();
+  }).withFailureHandler(function(err){ wrap.innerHTML='<div class="empty">Error: '+esc((err&&err.message)||err)+'</div>'; }).getDayBoard(d);
+}
+function renderAsistencia(){
+  var wrap=document.getElementById('asistWrap');
+  if(!ASIST_ROWS.length){ wrap.innerHTML='<div class="empty">No hay citas ese día.</div>'; document.getElementById('asistStats').innerHTML=''; return; }
+  var h='<table class="boardtable"><thead><tr><th>Hora</th><th>Paciente</th><th>Línea de negocio</th><th>Descripción</th><th style="text-align:center">Asistió</th><th>Comentario</th></tr></thead><tbody>';
+  ASIST_ROWS.forEach(function(r,i){
+    h+='<tr>'+
+      '<td class="nowrap">'+esc(r.horaIni)+'–'+esc(r.horaFin)+'</td>'+
+      '<td><b>'+esc(r.paciente||'—')+'</b>'+(r.telefono?('<div class="sub">'+esc(r.telefono)+'</div>'):'')+'</td>'+
+      '<td><span class="lchip">'+esc(r.linea)+'</span></td>'+
+      '<td>'+esc(r.descripcion||'—')+'</td>'+
+      '<td style="text-align:center"><input type="checkbox" id="achk_'+i+'" '+(r.asistio?'checked':'')+' onchange="onAsist('+i+')" style="width:20px;height:20px;cursor:pointer"></td>'+
+      '<td><input type="text" id="acom_'+i+'" value="'+esc(r.comentario||'')+'" placeholder="Comentario…" onblur="onAsist('+i+')" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-family:inherit;font-size:12px"></td>'+
+    '</tr>';
+  });
+  wrap.innerHTML=h+'</tbody></table>';
+  document.getElementById('asistBtns').style.display='flex';
+  renderAsistStats();
+}
+function onAsist(i){
+  var r=ASIST_ROWS[i];
+  var asistio=document.getElementById('achk_'+i).checked, comentario=document.getElementById('acom_'+i).value;
+  r.asistio=asistio; r.comentario=comentario; renderAsistStats();
+  google.script.run.withSuccessHandler(function(res){
+    if(!res||!res.ok){ asistMsg('🚫 No se guardó '+esc(r.paciente)+': '+esc((res&&res.error)||'?'),'bad'); }
+    else asistMsg('✓ Guardado · '+esc(r.paciente),'ok');
+  }).withFailureHandler(function(err){ asistMsg('🚫 '+esc((err&&err.message)||err),'bad'); }).setAttendance({calId:r.calId,eventId:r.eventId,asistio:asistio,comentario:comentario});
+}
+function renderAsistStats(){
+  var asis=ASIST_ROWS.filter(function(r){return r.asistio;}).length, tot=ASIST_ROWS.length;
+  function chip(l,n,k){ return '<div class="bstat bs-'+k+'"><div class="bn">'+n+'</div><div class="bl">'+l+'</div></div>'; }
+  document.getElementById('asistStats').innerHTML=chip('Total',tot,'t')+chip('Asistieron',asis,'c')+chip('Faltan',(tot-asis),'p');
+}
+function asistenciaPDF(){
+  if(!ASIST_ROWS.length) return;
+  var fecha=fmtFecha(document.getElementById('asistDate').value);
+  var filas=ASIST_ROWS.map(function(r){
+    return '<tr><td>'+esc(r.horaIni)+'–'+esc(r.horaFin)+'</td><td>'+esc(r.paciente||'')+'</td><td>'+esc(r.linea)+'</td><td>'+esc(r.descripcion||'')+'</td><td style="text-align:center;font-weight:700">'+(r.asistio?'✓':'☐')+'</td><td>'+esc(r.comentario||'')+'</td></tr>';
+  }).join('');
+  var asis=ASIST_ROWS.filter(function(r){return r.asistio;}).length;
+  var html='<!doctype html><html><head><meta charset="utf-8"><title>Asistencia '+esc(fecha)+'</title><style>'+
+    "@page{size:landscape;margin:14mm}body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1c1a17;font-size:11px}"+
+    'h1{font-size:16px;letter-spacing:.25em;text-transform:uppercase;margin:0;font-weight:500}.tag{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:#9b958a;margin:3px 0 14px}'+
+    '.mono{width:42px;height:42px;border:2px solid #0e0d0c;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;float:right}'+
+    '.sum{margin:0 0 12px;font-size:11px}table{width:100%;border-collapse:collapse}th{background:#0e0d0c;color:#fff;text-align:left;padding:6px 7px;font-size:9px;text-transform:uppercase}td{padding:6px 7px;border-bottom:1px solid #e8e2d6}'+
+    '</style></head><body><div class="mono">MS</div><h1>Registro de asistencia</h1><div class="tag">Dr. Miguel Soto · Cirujano Plástico Certificado</div>'+
+    '<div class="sum"><b>'+esc(fecha)+'</b> &nbsp; Asistieron: '+asis+' / '+ASIST_ROWS.length+'</div>'+
+    '<table><thead><tr><th>Hora</th><th>Paciente</th><th>Línea de negocio</th><th>Descripción</th><th>Asistió</th><th>Comentario</th></tr></thead><tbody>'+filas+'</tbody></table>'+
+    '<script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script></body></html>';
+  var w=window.open('','_blank'); w.document.write(html); w.document.close();
+}
+
+/* =========================================================================
    BUSCAR / EDITAR CITA  (cancelar · reagendar)
    ========================================================================= */
 var CITA_PATIENT=null, CITAS=[], CITAS_FOUND=[], citaTimer=null;
@@ -1110,67 +1200,5 @@ function boardReag(i){
 }
 </script>
 <script src="https://accounts.google.com/gsi/client" onload="initGsi()" async defer></script>
-<!-- ============================================================
-     MS UNIVERSE · Lanzador minimalista entre apps
-     Pega este bloque COMPLETO justo antes de </body> en:
-       agenda · cotizador · cobros  (el mismo código en las tres)
-     Por defecto es solo un círculo "MS" en la esquina.
-     Al tocarlo se abre el menú; al tocar fuera se cierra.
-     Detecta sola en cuál app estás y la marca.
-     ============================================================ -->
-<div id="ms-switch">
-  <div class="ms-menu">
-    <a data-app="app"       href="https://app.miguelsotomd.com">Portal</a>
-    <a data-app="agenda"    href="https://agenda.miguelsotomd.com">Agenda</a>
-    <a data-app="cotizador" href="https://cotizador.miguelsotomd.com">Cotizador</a>
-    <a data-app="cobros"    href="https://cobros.miguelsotomd.com">Cobros</a>
-  </div>
-  <button class="ms-trigger" type="button" aria-label="Cambiar de app">
-    <span class="ms-mark">MS</span>
-  </button>
-</div>
-
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500&display=swap');
-  /* Posición: por defecto abajo-derecha. Para moverlo cambia bottom/right.
-     Abajo-izquierda: left:20px; right:auto;  Arriba-derecha: top:20px; bottom:auto; */
-  #ms-switch{ position:fixed; bottom:20px; right:20px; z-index:99999;
-    font-family:'Jost',-apple-system,system-ui,sans-serif; display:flex;
-    flex-direction:column; align-items:flex-end; gap:10px; }
-
-  .ms-trigger{ width:48px; height:48px; border-radius:50%; cursor:pointer;
-    background:rgba(7,9,8,.88); border:1px solid rgba(161,148,135,.35);
-    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-    box-shadow:0 10px 28px -10px rgba(0,0,0,.6); transition:transform .3s, border-color .3s;
-    display:flex; align-items:center; justify-content:center; padding:0; }
-  .ms-trigger:hover{ border-color:rgba(161,148,135,.7); }
-  .ms-mark{ font-size:15px; font-weight:400; letter-spacing:.12em; color:#F4F2F1; }
-  #ms-switch.open .ms-trigger{ transform:rotate(90deg); border-color:#A19487; }
-
-  .ms-menu{ display:flex; flex-direction:column; align-items:flex-end; gap:7px;
-    opacity:0; pointer-events:none; transform:translateY(8px); transition:opacity .28s, transform .28s; }
-  #ms-switch.open .ms-menu{ opacity:1; pointer-events:auto; transform:translateY(0); }
-  .ms-menu a{ text-decoration:none; color:#F4F2F1; font-size:12.5px; font-weight:300;
-    letter-spacing:.14em; text-transform:uppercase; padding:9px 16px; border-radius:999px;
-    background:rgba(7,9,8,.88); border:1px solid rgba(161,148,135,.22);
-    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
-    box-shadow:0 8px 22px -12px rgba(0,0,0,.6); white-space:nowrap; transition:background .25s,color .25s; }
-  .ms-menu a:hover{ background:rgba(161,148,135,.18); color:#fff; }
-  .ms-menu a.ms-active{ background:#A19487; color:#070908; font-weight:500; pointer-events:none; }
-</style>
-
-<script>
-  (function(){
-    var box = document.getElementById('ms-switch');
-    var trigger = box.querySelector('.ms-trigger');
-    var sub = location.hostname.split('.')[0]; // agenda | cotizador | cobros | app
-    box.querySelectorAll('.ms-menu a').forEach(function(a){
-      if (a.getAttribute('data-app') === sub) a.classList.add('ms-active');
-    });
-    trigger.addEventListener('click', function(e){ e.stopPropagation(); box.classList.toggle('open'); });
-    document.addEventListener('click', function(){ box.classList.remove('open'); });
-  })();
-</script>
-<!-- ===================== fin lanzador MS Universe ===================== -->
 </body>
 </html>
