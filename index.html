@@ -27,7 +27,8 @@ function setupShim(){
     reschedule:        function(p){ return {a:'reschedule', p:p}; },
     getDamianSheet:    function(){ return {a:'damianSheet', p:{}}; },
     setAttendance:     function(p){ return {a:'setAttendance', p:p}; },
-    getCotizaciones:   function(id,nombre){ return {a:'cotizaciones', p:{pacienteId:id, pacienteNombre:nombre}}; }
+    getCotizaciones:   function(id,nombre){ return {a:'cotizaciones', p:{pacienteId:id, pacienteNombre:nombre}}; },
+    getPronostico:     function(fecha){ return {a:'pronostico', p:{fecha:fecha}}; }
   };
   window.google = window.google || {};
   window.google.script = window.google.script || {};
@@ -1303,6 +1304,66 @@ function boardReag(i){
     trigger.addEventListener('click', function(e){ e.stopPropagation(); box.classList.toggle('open'); });
     document.addEventListener('click', function(){ box.classList.remove('open'); });
   })();
+  /* =========================================================================
+   PRONÓSTICO DE COBROS DEL DÍA SIGUIENTE
+   ========================================================================= */
+var PRON_ROWS=[], PRON_FECHA='';
+function pronMsg(t,k){ var el=document.getElementById('pronStatus'); if(el){ el.className='status '+(k||'info'); el.innerHTML=t; } }
+function mananaStr(){ var d=new Date(Date.now()+86400000); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function pronMoney(n){ if(n==null) return '—'; return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function pronTerminalLabel(t){ if(t==='Dr') return 'Dr. Miguel Soto'; if(t==='Renasté') return 'Renasté'; if(t==='split') return 'Dr + Renasté'; return t||'—'; }
+
+function loadPronostico(){
+  var d=document.getElementById('pronDate').value;
+  if(!d){ pronMsg('Elige una fecha.','bad'); return; }
+  PRON_FECHA=d;
+  var wrap=document.getElementById('pronWrap'); wrap.innerHTML='<div class="empty">Consultando saldos en el sistema de cobros…</div>';
+  pronMsg('','info'); document.getElementById('pronBtns').style.display='none'; document.getElementById('pronStats').innerHTML='';
+  google.script.run.withSuccessHandler(function(res){
+    if(!res||!res.ok){ wrap.innerHTML='<div class="empty">No se pudo generar el pronóstico ('+esc((res&&res.error)||'?')+').</div>'; return; }
+    PRON_ROWS=res.citas||[];
+    renderPronostico(res.totales||{});
+  }).withFailureHandler(function(err){ wrap.innerHTML='<div class="empty">Error: '+esc((err&&err.message)||err)+'</div>'; }).getPronostico(d);
+}
+
+function renderPronostico(totales){
+  var wrap=document.getElementById('pronWrap');
+  if(!PRON_ROWS.length){ wrap.innerHTML='<div class="empty">No hay citas ese día.</div>'; document.getElementById('pronStats').innerHTML=''; return; }
+  var h='<table class="boardtable"><thead><tr><th>Hora</th><th>Paciente</th><th>Concepto</th><th>Terminal</th><th style="text-align:right">Cargo de llegada</th><th>Nota</th></tr></thead><tbody>';
+  PRON_ROWS.forEach(function(r){
+    var gris = r.gris ? ' style="opacity:.55"' : '';
+    var montoTxt = (r.cargoLlegada==null) ? '<span style="color:var(--warn);font-weight:600">verificar</span>' : '<b>'+pronMoney(r.cargoLlegada)+'</b>';
+    var desg = (r.desglose&&r.desglose.length>1) ? '<div class="sub">'+r.desglose.map(function(d){return pronTerminalLabel(d.terminal)+': '+pronMoney(d.monto);}).join(' · ')+'</div>' : '';
+    h+='<tr'+gris+'>'+
+      '<td class="nowrap">'+esc(r.hora||'—')+'</td>'+
+      '<td><b>'+esc(r.nombrePaciente||'—')+'</b></td>'+
+      '<td>'+esc(r.concepto||'—')+'</td>'+
+      '<td>'+esc(pronTerminalLabel(r.terminal))+'</td>'+
+      '<td style="text-align:right">'+montoTxt+desg+'</td>'+
+      '<td class="sub">'+esc(r.nota||'')+'</td>'+
+    '</tr>';
+  });
+  h+='</tbody></table>';
+  wrap.innerHTML=h;
+  document.getElementById('pronBtns').style.display='flex';
+  function chip(l,n,k){ return '<div class="bstat bs-'+k+'"><div class="bn">'+n+'</div><div class="bl">'+l+'</div></div>'; }
+  document.getElementById('pronStats').innerHTML=
+    chip('Total citas',PRON_ROWS.length,'t')+
+    chip('Esperado Dr.',pronMoney(totales.dr||0),'c')+
+    chip('Esperado Renasté',pronMoney(totales.renaste||0),'p')+
+    chip('Total esperado',pronMoney(totales.general||0),'r');
+}
+
+function pronosticoPDF(){
+  if(!PRON_ROWS.length) return;
+  var fecha=fmtFecha(PRON_FECHA);
+  var head=['Hora','Paciente','Concepto','Terminal','Cargo de llegada','Nota'];
+  var body=PRON_ROWS.map(function(r){ return [
+    r.hora||'', limpiaPDF(r.nombrePaciente), limpiaPDF(r.concepto),
+    pronTerminalLabel(r.terminal), (r.cargoLlegada==null?'verificar':pronMoney(r.cargoLlegada)), limpiaPDF(r.nota)
+  ]; });
+  descargarPDF('Pronostico de cobros', 'Dr. Miguel Soto   |   '+fecha+'   |   Citas: '+PRON_ROWS.length, head, body, 'Pronostico_'+(PRON_FECHA||'')+'.pdf');
+}
 </script>
 <!-- ===================== fin lanzador MS Universe ===================== -->
 </body>
