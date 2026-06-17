@@ -25,6 +25,8 @@ function setupShim(){
     findCitas:         function(p){ return {a:'findCitas', p:p}; },
     cancelCita:        function(p){ return {a:'cancelCita', p:p}; },
     reschedule:        function(p){ return {a:'reschedule', p:p}; },
+    citaForEdit:       function(p){ return {a:'citaForEdit', p:p}; },
+    updateCita:        function(p){ return {a:'updateCita', p:p}; },
     getDamianSheet:    function(){ return {a:'damianSheet', p:{}}; },
     setAttendance:     function(p){ return {a:'setAttendance', p:p}; },
     getCotizaciones:   function(id,nombre){ return {a:'cotizaciones', p:{pacienteId:id, pacienteNombre:nombre}}; }
@@ -378,6 +380,7 @@ function initGsi(){
 <script>
 /* ===== estado / catálogos (llegan del backend) ===== */
 var CAT={}, CALLBL={}, current="consulta", selectedPatient=null, searchTimer=null;
+var EDIT_CTX=null;   // cuando se está editando una cita existente: {calId, eventId}
 var cotizaciones=[], selectedCotizacion=null;   // cotizaciones aceptadas del paciente (cirugía)
 
 /* ===== arranque (se llama tras iniciar sesión con Google) ===== */
@@ -463,7 +466,6 @@ function buildTypes(){
       specific:[
         {k:"cabina",l:"Cabina",t:"select",opt:["Cabina 1","Cabina 2"],req:true},
         {k:"procedimiento",l:"Procedimiento",t:"select",opt:((CAT.procedimientosInyectables&&CAT.procedimientosInyectables.length)?CAT.procedimientosInyectables:CAT.procIny),req:true},
-        {k:"area",l:"Área(s)",t:"text",req:true,ph:"Full face, frente…"},
         {k:"anestesia",l:"Anestesia",t:"select",opt:["Local"],val:"Local"}
       ], schedule:SCHEDULE, tail:TAIL},
     energy:{label:"Energy devices",icon:"⚡",hint:"Endolift, eCO2, Renuvion. Agenda de Cirugías.",
@@ -698,7 +700,7 @@ function buildClientEvents(f){
 
 /* ===== guardar (servidor autoritativo) ===== */
 var statusEl=document.getElementById("status"), previewEl=document.getElementById("preview"), saveBtn=document.getElementById("saveBtn");
-function clearPreview(){ previewEl.innerHTML='<div class="empty">Selecciona un paciente y llena la cita.</div>'; statusEl.className="status"; statusEl.innerHTML=""; document.getElementById("evtCount").textContent="0"; document.getElementById("booked").innerHTML='<div class="empty">Selecciona fecha y agenda.</div>'; }
+function clearPreview(){ EDIT_CTX=null; if(saveBtn)saveBtn.textContent="Validar y agendar"; previewEl.innerHTML='<div class="empty">Selecciona un paciente y llena la cita.</div>'; statusEl.className="status"; statusEl.innerHTML=""; document.getElementById("evtCount").textContent="0"; document.getElementById("booked").innerHTML='<div class="empty">Selecciona fecha y agenda.</div>'; }
 function nuevaCita(){ clearPatient(); window.scrollTo(0,0); }
 function clearPreviewKeep(){ renderForm(); clearPreview(); window.scrollTo(0,0); }
 function allFields(){ var t=TYPES[current]; var a=t.common.concat(t.motivo,t.specific,t.tail); if(!t.surgery) a=a.concat(t.schedule); return a; }
@@ -719,16 +721,19 @@ function doSave(override){
 
   // payload al servidor
   var hasOvr=SAVE_OVR&&Object.keys(SAVE_OVR).length;
+  var editing=!!EDIT_CTX;
   var payload={ tipo:current, paciente:selectedPatient, campos:f, override:(hasOvr?SAVE_OVR:null), cotizacion:(current==="cirugia"?selectedCotizacion:null) };
+  if(editing){ payload.editCalId=EDIT_CTX.calId; payload.editEventId=EDIT_CTX.eventId; }
   saveBtn.disabled=true; saveBtn.textContent="Validando…";
-  statusEl.className="status info"; statusEl.style.display=""; statusEl.innerHTML=(hasOvr?"⏳ Procesando autorización…":"⏳ Validando y escribiendo en la agenda…");
-  google.script.run.withSuccessHandler(function(res){
-    saveBtn.disabled=false; saveBtn.textContent="Validar y agendar"; statusEl.style.display="";
+  statusEl.className="status info"; statusEl.style.display=""; statusEl.innerHTML=(hasOvr?"⏳ Procesando autorización…":(editing?"⏳ Guardando cambios…":"⏳ Validando y escribiendo en la agenda…"));
+  var runner=google.script.run.withSuccessHandler(function(res){
+    saveBtn.disabled=false; saveBtn.textContent=editing?"Guardar cambios":"Validar y agendar"; statusEl.style.display="";
     if(res.ok){
+      EDIT_CTX=null; saveBtn.textContent="Validar y agendar";
       statusEl.className="status ok";
       var tag = res.empalme ? ' <b>(empalme autorizado)</b>' : '';
       var antTag = res.anticipo ? (' · 💳 '+esc(res.anticipo)) : '';
-      statusEl.innerHTML='✅ Agendado'+tag+antTag+'. '+res.eventos.length+(res.eventos.length===1?' evento creado':' eventos vinculados creados')+' en Google Calendar.<ul>'+
+      statusEl.innerHTML='✅ '+(res.editada?'Cita actualizada':'Agendado')+tag+antTag+'. '+res.eventos.length+(res.eventos.length===1?' evento':' eventos')+' en Google Calendar.<ul>'+
         res.eventos.map(function(e){return '<li>'+esc(e.calendar)+' · '+esc(e.when)+(e.empalmado?' ⚠️ empalme':'')+'</li>';}).join("")+'</ul>'+
         '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn primary" onclick="nuevaCita()">➕ Agendar otra cita</button><button type="button" class="btn ghost" onclick="clearPreviewKeep()">Otra cita (mismo paciente)</button></div>';
     } else if(res.faltantes){ statusEl.className="status bad"; statusEl.innerHTML='🚫 Faltan campos: '+res.faltantes.map(esc).join(", "); }
@@ -772,7 +777,8 @@ function doSave(override){
       }; }
     }
     else { statusEl.className="status bad"; statusEl.innerHTML='🚫 '+esc(res.error||"Error desconocido"); }
-  }).withFailureHandler(function(err){ saveBtn.disabled=false; saveBtn.textContent="Validar y agendar"; statusEl.style.display=""; statusEl.className="status bad"; statusEl.innerHTML='🚫 '+esc((err&&err.message)||err); }).createAppointment(payload);
+  }).withFailureHandler(function(err){ saveBtn.disabled=false; saveBtn.textContent=(editing?"Guardar cambios":"Validar y agendar"); statusEl.style.display=""; statusEl.className="status bad"; statusEl.innerHTML='🚫 '+esc((err&&err.message)||err); });
+  if(editing) runner.updateCita(payload); else runner.createAppointment(payload);
 }
 saveBtn.onclick=function(){ doSave(null); };
 document.getElementById("clearBtn").onclick=function(){ renderForm(); clearPreview(); };
@@ -1180,7 +1186,8 @@ function renderCitas(){
       '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">'+
         '<div><b>'+esc(fmtFecha(c.fecha))+'</b> · '+esc(c.hora)+'–'+esc(c.horaFin)+' &nbsp;<span class="lchip">'+esc(c.linea)+'</span>'+canc+
         '<div style="color:var(--muted);font-size:12px;margin-top:3px">'+esc(c.descripcion||'—')+(c.operativo?(' · '+esc(c.operativo)):'')+' · estatus: '+esc(c.estatus)+(c.etapa?(' · etapa '+esc(c.etapa)):'')+'</div></div>'+
-        (c.cancelada?'':'<div style="display:flex;gap:6px">'+
+        (c.cancelada?'':'<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+          (c.editable?'<button type="button" class="btn ghost" onclick="editarCita('+i+')">Editar</button>':'')+
           '<button type="button" class="btn ghost" onclick="reagCita('+i+')">Reagendar</button>'+
           '<button type="button" class="btn ghost" style="color:#a33a32;border-color:#e3bdb8" onclick="cancCita('+i+')">Cancelar</button></div>')+
       '</div><div id="reag_'+i+'"></div></div>';
@@ -1222,6 +1229,30 @@ function reagGuardar(i,override){
     citaMsg('🚫 '+esc((res&&res.error)||'Error'),'bad');
   }).withFailureHandler(function(err){ citaMsg('🚫 '+esc((err&&err.message)||err),'bad'); })
     .reschedule({calId:c.calId,eventId:c.eventId,fecha:fecha,hora:hora,dur:dur,override:override||null});
+}
+
+/* Editar una cita: precarga el formulario de Agendar y entra en modo edición */
+function editarCita(i){
+  var c=CITAS[i];
+  citaMsg('⏳ Cargando cita…','info');
+  google.script.run.withSuccessHandler(function(res){
+    if(!res||!res.ok){ citaMsg('🚫 '+esc((res&&res.error)||'No se pudo editar'),'bad'); return; }
+    EDIT_CTX={calId:c.calId,eventId:c.eventId};
+    current=res.tipo; selectedPatient=res.paciente; selectedCotizacion=null;
+    showView('agendar');
+    if(window.renderTabsInit) renderTabsInit();
+    renderForm();
+    var f=res.campos||{};
+    var aplicar=function(){ Object.keys(f).forEach(function(k){ var el=document.getElementById('fld_'+k); if(el && f[k]!=null && f[k]!=='') el.value=f[k]; }); };
+    aplicar();   // 1) precarga
+    ['fld_motivo','fld_modalidad','fld_cabina','fld_tipo_px'].forEach(function(id){ var el=document.getElementById(id); if(el){ try{ el.dispatchEvent(new Event('change')); }catch(e){} } });
+    aplicar();   // 2) re-aplica por si los handlers cambiaron duración/etc.
+    if(window.updateRoute) updateRoute();
+    var st=document.getElementById('status'); st.className='status info'; st.style.display='';
+    st.innerHTML='✏️ <b>Editando</b> la cita de '+esc(c.paciente)+' ('+esc(fmtFecha(c.fecha))+' '+esc(c.hora)+'). Cambia lo que necesites y dale <b>Guardar cambios</b>.';
+    saveBtn.textContent='Guardar cambios';
+    window.scrollTo(0,0);
+  }).withFailureHandler(function(err){ citaMsg('🚫 '+esc((err&&err.message)||err),'bad'); }).citaForEdit({calId:c.calId,eventId:c.eventId});
 }
 
 /* Acciones rápidas desde el tablero de confirmaciones */
