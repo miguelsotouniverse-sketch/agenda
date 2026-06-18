@@ -762,6 +762,7 @@ function doSave(override){
       var antTag = res.anticipo ? (' · 💳 '+esc(res.anticipo)) : '';
       statusEl.innerHTML='✅ '+(res.editada?'Cita actualizada':'Agendado')+tag+antTag+'. '+res.eventos.length+(res.eventos.length===1?' evento':' eventos')+' en Google Calendar.<ul>'+
         res.eventos.map(function(e){return '<li>'+esc(e.calendar)+' · '+esc(e.when)+(e.empalmado?' ⚠️ empalme':'')+'</li>';}).join("")+'</ul>'+
+        (res.aviso?('<div style="margin-top:8px;color:var(--bad);font-weight:700">'+esc(res.aviso)+'</div>'):'')+
         '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn primary" onclick="nuevaCita()">➕ Agendar otra cita</button><button type="button" class="btn ghost" onclick="clearPreviewKeep()">Otra cita (mismo paciente)</button></div>';
     } else if(res.faltantes){ statusEl.className="status bad"; statusEl.innerHTML='🚫 Faltan campos: '+res.faltantes.map(esc).join(", "); }
     else if(res.error==='SIN_ANTICIPO'){
