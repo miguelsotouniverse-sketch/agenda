@@ -417,6 +417,7 @@ function startApp(){
     CAT.procedimientos = b.procedimientos || [];   // los procedimientos llegan aparte del catálogo
     CAT.procedimientosEstetica = b.procedimientosEstetica || [];   // solo ED/faciales + FZ (medicina estética)
     CAT.procedimientosInyectables = b.procedimientosInyectables || [];   // todos los ítems de la pestaña Inyectables
+    CAT.procedimientosFZ = b.procedimientosFZ || [];   // pestaña Fibrosis Zero (solo "1 sesión")
     document.getElementById("uchip").textContent = "👤 "+(CURRENT_AGENDA || b.usuario || "Sesión activa");
     buildTypes(); renderTabsInit(); renderForm();
   }).withFailureHandler(fail).getBootstrap();
@@ -579,9 +580,19 @@ function renderForm(){
       var updConsulta=function(){
         var m=mot?mot.value:"";
         var primera=/valoraci|primera vez/i.test(m);
-        var revision=(m && !primera);   // revisión / subsecuente = sin venta
-        var lb=formEl.querySelector('.f[data-for="interes"] label'); if(lb) lb.textContent=revision?"Procedimiento a revisar":"Procedimiento de interés";
-        // revisión: no hay venta → ocultar Prospecta/Cierra
+        var fz=/fibrosis|pruc/i.test(m);            // Fibrosis Zero / PRUC = tratamiento (venta)
+        var revision=(m && !primera && !fz);        // revisión / subsecuente = sin venta
+        var lb=formEl.querySelector('.f[data-for="interes"] label'); if(lb) lb.textContent=fz?"Procedimiento":(revision?"Procedimiento a revisar":"Procedimiento de interés");
+        // En estética: si el motivo es FZ/PRUC, el desplegable jala la pestaña FZ (solo "1 sesión"); si no, medicina estética.
+        if(current==="estetica"){
+          var isel=document.getElementById("fld_interes");
+          if(isel){
+            var cur=isel.value, opts=fz?(CAT.procedimientosFZ||[]):(CAT.procedimientosEstetica||[]);
+            isel.innerHTML='<option value="" selected disabled hidden>Seleccionar…</option>'+opts.map(function(o){return '<option>'+esc(o)+'</option>';}).join("");
+            if(cur){ for(var k=0;k<isel.options.length;k++){ if(isel.options[k].value===cur){ isel.value=cur; break; } } }
+          }
+        }
+        // revisión/subsecuente: no hay venta → ocultar Prospecta/Cierra (FZ/PRUC sí son venta → se muestran)
         ["prospecta","cierra"].forEach(function(k){ var fd=formEl.querySelector('.f[data-for="'+k+'"]'); if(fd) fd.style.display=revision?"none":""; });
         if(d&&m) d.value=primera?60:30;
         // Presencial: las fotos no aplican (solo en consulta virtual) → ocultar y limpiar
@@ -710,7 +721,7 @@ function buildClientEvents(f){
   }
   var extra=[];
   if(current==="consulta"||current==="estetica"){
-    var etiqInt=(/valoraci|primera vez/i.test(f.motivo||''))?'⚪️ Procedimiento de interés':'⚪️ Procedimiento a revisar';
+    var etiqInt=(/fibrosis|pruc/i.test(f.motivo||''))?'⚪️ Procedimiento':((/valoraci|primera vez/i.test(f.motivo||''))?'⚪️ Procedimiento de interés':'⚪️ Procedimiento a revisar');
     if(current==="estetica") extra.push(L('🏠 Cabina',f.cabina));
     extra=extra.concat([L(etiqInt,f.interes),L('📧 Correo',p.correo),L('📆 Nacimiento',p.nacimiento),L('📍 Residencia',p.residencia)]);
     if(f.modalidad!=="Presencial") extra.push(L('📸 Fotos',f.fotos||'NA'));   // fotos solo en virtual
