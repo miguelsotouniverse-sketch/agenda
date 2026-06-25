@@ -509,9 +509,9 @@ function buildTypes(){
       specific:[
         {k:"anestesia",l:"Anestesia",t:"select",opt:["General","Sedación","Local"],req:true},
         {k:"vpa_operativo",l:"Operativo VPA (anestesióloga)",t:"select",opt:OPERATIVOS,val:"Dra. Karen García"},
-        {k:"cabina_vpo",l:"Cabina VPO",t:"select",opt:["Cabina 1","Cabina 2"],req:true},
-        {k:"vpo_fecha",l:"Fecha VPO",t:"date",req:true},{k:"vpo_hora",l:"Hora VPO",t:"time",req:true},
-        {k:"vpa_fecha",l:"Fecha VPA",t:"date",req:true},{k:"vpa_hora",l:"Hora VPA",t:"time",req:true},
+        {k:"cabina_vpo",l:"Cabina VPO (opcional)",t:"select",opt:["Cabina 1","Cabina 2"]},
+        {k:"vpo_fecha",l:"Fecha VPO (opcional)",t:"date"},{k:"vpo_hora",l:"Hora VPO (opcional)",t:"time"},
+        {k:"vpa_fecha",l:"Fecha VPA (opcional)",t:"date"},{k:"vpa_hora",l:"Hora VPA (opcional)",t:"time"},
         {k:"qx_fecha",l:"Fecha Cirugía",t:"date",req:true},{k:"qx_hora",l:"Hora Cirugía",t:"time",req:true},
         {k:"qx_dur",l:"Duración Qx (min)",t:"number",req:true,val:180},
         {k:"ingreso",l:"Hora ingreso hospitalario",t:"time"}
@@ -709,15 +709,18 @@ function buildClientEvents(f){
   if(t.surgery){
     var cirTxt = selectedCotizacion ? (((selectedCotizacion.procedimientos||[]).join(' + ')||('Cotización '+selectedCotizacion.folio))+' ['+selectedCotizacion.folio+']') : (f.cirugia||'—');
     var cirujano=f.medico||'—', anest=f.vpa_operativo||'Dra. Karen García';
+    var hasVPO=!!(f.vpo_fecha&&f.vpo_hora), hasVPA=!!(f.vpa_fecha&&f.vpa_hora);
     var d=function(et,op){return [L('🩺 Motivo de visita',et),L('⚪️ Cirugía Programada',cirTxt),L('😴 Anestesia',f.anestesia),
       L('🏥 Médico Titular','Dr. Miguel Soto'),L('👤 Operativo',op),
-      L('📆 Fecha VPO',f.vpo_fecha+' '+f.vpo_hora),L('📆 Fecha VPA',f.vpa_fecha+' '+f.vpa_hora),L('📆 Fecha Cirugía',f.qx_fecha+' '+f.qx_hora),
+      L('📆 Fecha VPO',hasVPO?(f.vpo_fecha+' '+f.vpo_hora):'Sin VPO (directo a cirugía)'),L('📆 Fecha VPA',hasVPA?(f.vpa_fecha+' '+f.vpa_hora):'Sin VPA (directo a cirugía)'),L('📆 Fecha Cirugía',f.qx_fecha+' '+f.qx_hora),
       L('🕞 Ingreso',f.ingreso||'PD'),L('💵 Costo',money(f.costo)),L('💰 Anticipo',money(f.anticipo)),L('☑️ Agenda',CURRENT_AGENDA)].filter(Boolean).join('\n');};
     var vpo=f.cabina_vpo==="Cabina 2"?CALLBL.cabina2:CALLBL.cabina1;
     var fc=fichaClient(p,true);   // cirugía: sin "procedimiento de interés"
-    return [{cal:vpo,sum:sum,when:f.vpo_fecha+' '+f.vpo_hora+' (VPO)',desc:d('VPO',cirujano)+fc},
-            {cal:CALLBL.cirugias,sum:sum,when:f.vpa_fecha+' '+f.vpa_hora+' (VPA)',desc:d('VPA',anest)+fc},
-            {cal:CALLBL.cirugias,sum:sum,when:f.qx_fecha+' '+f.qx_hora+' (Cirugía)',desc:d('Cirugía',cirujano)+fc}];
+    var evs=[];
+    if(hasVPO) evs.push({cal:vpo,sum:sum,when:f.vpo_fecha+' '+f.vpo_hora+' (VPO)',desc:d('VPO',cirujano)+fc});
+    if(hasVPA) evs.push({cal:CALLBL.cirugias,sum:sum,when:f.vpa_fecha+' '+f.vpa_hora+' (VPA)',desc:d('VPA',anest)+fc});
+    evs.push({cal:CALLBL.cirugias,sum:sum,when:f.qx_fecha+' '+f.qx_hora+' (Cirugía)',desc:d('Cirugía',cirujano)+fc});
+    return evs;
   }
   var extra=[];
   if(current==="consulta"||current==="estetica"){
@@ -750,6 +753,12 @@ function doSave(override){
   if(override==null) SAVE_OVR={}; else SAVE_OVR=Object.assign(SAVE_OVR||{}, override);
   var f=readForm(), fields=allFields();
   var missing=fields.filter(function(x){return x.req && !(x.fromPatient? (selectedPatient[x.k]) : f[x.k]);});
+  // Cirugía: VPO y VPA son opcionales, pero si capturas una mitad exige la otra (y la cabina si hay VPO).
+  if(current==="cirugia"){
+    if((f.vpo_fecha&&!f.vpo_hora)||(!f.vpo_fecha&&f.vpo_hora)) missing.push({k:(f.vpo_fecha?"vpo_hora":"vpo_fecha"),l:"VPO: completa fecha y hora, o deja ambas vacías para omitirlo"});
+    if((f.vpa_fecha&&!f.vpa_hora)||(!f.vpa_fecha&&f.vpa_hora)) missing.push({k:(f.vpa_fecha?"vpa_hora":"vpa_fecha"),l:"VPA: completa fecha y hora, o deja ambas vacías para omitirla"});
+    if(f.vpo_fecha&&f.vpo_hora&&!f.cabina_vpo) missing.push({k:"cabina_vpo",l:"Cabina VPO (requerida si agendas VPO)"});
+  }
   markInvalid(missing);
   // preview siempre
   var evs=buildClientEvents(f);
