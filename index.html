@@ -417,6 +417,7 @@ function startApp(){
     CAT.procedimientos = b.procedimientos || [];   // los procedimientos llegan aparte del catálogo
     CAT.procedimientosEstetica = b.procedimientosEstetica || [];   // solo ED/faciales + FZ (medicina estética)
     CAT.procedimientosInyectables = b.procedimientosInyectables || [];   // todos los ítems de la pestaña Inyectables
+    CAT.procedimientosED = b.procedimientosED || [];   // pestaña "ED + Faciales" (energy devices), nombres reales
     CAT.procedimientosFZ = b.procedimientosFZ || [];   // pestaña Fibrosis Zero (solo "1 sesión")
     document.getElementById("uchip").textContent = "👤 "+(CURRENT_AGENDA || b.usuario || "Sesión activa");
     buildTypes(); renderTabsInit(); renderForm();
@@ -500,8 +501,7 @@ function buildTypes(){
       cal:function(){return CALLBL.cirugias;}, dur:function(){return 150;},
       common:COMMON, motivo:[{k:"motivo",l:"Motivo de visita",t:"text",req:true,val:"Tratamiento Energy Devices"}],
       specific:[
-        {k:"tratamiento",l:"Tratamiento programado",t:"select",opt:CAT.procEnergy,req:true},
-        {k:"zona",l:"Zona",t:"text",req:true,ph:"Cara y cuello…"},
+        {k:"tratamiento",l:"Tratamiento programado",t:"select",opt:((CAT.procedimientosED&&CAT.procedimientosED.length)?CAT.procedimientosED:CAT.procEnergy),req:true},
         {k:"anestesia",l:"Anestesia",t:"select",opt:ANEST,req:true}
       ], schedule:SCHEDULE, tail:TAIL},
     cirugia:{label:"Cirugía",icon:"🔪",hint:"Genera 3 eventos vinculados: VPO (cabina) → VPA → Qx (cirugías).",surgery:true,
@@ -730,7 +730,7 @@ function buildClientEvents(f){
     if(f.modalidad!=="Presencial") extra.push(L('📸 Fotos',f.fotos||'NA'));   // fotos solo en virtual
   }
   if(current==="inyectables") extra=[L('🏠 Cabina',f.cabina),L('⚪️ Procedimiento',f.procedimiento),L('😴 Anestesia',f.anestesia||'Local')];
-  if(current==="energy") extra=[L('⚪️ Tratamiento',f.tratamiento),L('⚫️ Zona',f.zona),L('😴 Anestesia',f.anestesia)];
+  if(current==="energy") extra=[L('⚪️ Tratamiento',f.tratamiento),L('😴 Anestesia',f.anestesia)];
   var titularPrev=(current==="estetica")?(f.medico||'—'):'Dr. Miguel Soto';
   var desc=['🔄 Tipo de paciente: '+(f.tipo_px||'—'),'🩺 Motivo de visita: '+(f.motivo||'—')].concat(extra.filter(Boolean)).concat([
     '🏥 Médico Titular: '+titularPrev,'👤 Operativo: '+(f.medico||'—'),
