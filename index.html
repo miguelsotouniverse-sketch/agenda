@@ -378,6 +378,7 @@ function initGsi(){
       <div id="pronWrap"><div class="empty">Elige un día y carga el pronóstico.</div></div>
       <div class="boardreport" id="pronBtns" style="display:none">
         <button type="button" class="btn ghost" onclick="pronosticoPDF()">📄 Descargar PDF</button>
+        <button type="button" class="btn ghost" onclick="pronosticoCSV()">📊 Descargar Excel</button>
       </div>
     </div>
   </div>
@@ -1401,6 +1402,39 @@ function pronosticoPDF(){
     pronTerminalLabel(r.terminal), (r.cargoLlegada==null?'verificar':pronMoney(r.cargoLlegada)), limpiaPDF(r.nota)
   ]; });
   descargarPDF('Pronostico de cobros', 'Dr. Miguel Soto   |   '+fecha+'   |   Citas: '+PRON_ROWS.length, head, body, 'Pronostico_'+(PRON_FECHA||'')+'.pdf');
+}
+
+/* Exporta el pronóstico a CSV (se abre en Excel) con montos numéricos editables y el desglose Dr/Renasté. */
+function pronosticoCSV(){
+  if(!PRON_ROWS.length){ pronMsg('Primero carga un día.','bad'); return; }
+  var head=['Hora','Paciente','Concepto','Terminal','Cargo de llegada','Cargo Dr.','Cargo Renasté','Nota'];
+  var rows=PRON_ROWS.map(function(r){
+    var dr=0, ren=0;
+    if(r.desglose&&r.desglose.length){ r.desglose.forEach(function(d){ if(d.terminal==='Renasté') ren+=d.monto; else dr+=d.monto; }); }
+    else if(r.cargoLlegada!=null){ if(r.terminal==='Renasté') ren=r.cargoLlegada; else dr=r.cargoLlegada; }
+    var verif=(r.cargoLlegada==null);
+    return [
+      r.hora||'', r.nombrePaciente||'', r.concepto||'', pronTerminalLabel(r.terminal),
+      verif?'verificar':Number(r.cargoLlegada).toFixed(2),
+      verif?'':dr.toFixed(2), verif?'':ren.toFixed(2), r.nota||''
+    ];
+  });
+  // Fila de totales al final (suma de lo numérico).
+  var totDr=0, totRen=0, totGen=0;
+  PRON_ROWS.forEach(function(r){
+    if(r.cargoLlegada==null) return;
+    totGen+=r.cargoLlegada;
+    if(r.desglose&&r.desglose.length){ r.desglose.forEach(function(d){ if(d.terminal==='Renasté') totRen+=d.monto; else totDr+=d.monto; }); }
+    else if(r.terminal==='Renasté') totRen+=r.cargoLlegada; else totDr+=r.cargoLlegada;
+  });
+  rows.push(['','','','TOTAL',totGen.toFixed(2),totDr.toFixed(2),totRen.toFixed(2),'']);
+  var cell=function(v){ v=String(v==null?'':v); return /[",\n;]/.test(v) ? ('"'+v.replace(/"/g,'""')+'"') : v; };
+  var csv=[head].concat(rows).map(function(r){ return r.map(cell).join(','); }).join('\r\n');
+  var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download='Pronostico_'+(PRON_FECHA||'')+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
 }
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
