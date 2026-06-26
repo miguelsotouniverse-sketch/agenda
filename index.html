@@ -378,7 +378,7 @@ function initGsi(){
       <div id="pronWrap"><div class="empty">Elige un día y carga el pronóstico.</div></div>
       <div class="boardreport" id="pronBtns" style="display:none">
         <button type="button" class="btn ghost" onclick="pronosticoPDF()">📄 Descargar PDF</button>
-        <button type="button" class="btn ghost" onclick="pronosticoCSV()">📊 Descargar Excel</button>
+        <button type="button" class="btn ghost" onclick="pronosticoExcel()">📊 Descargar Excel</button>
       </div>
     </div>
   </div>
@@ -1404,22 +1404,14 @@ function pronosticoPDF(){
   descargarPDF('Pronostico de cobros', 'Dr. Miguel Soto   |   '+fecha+'   |   Citas: '+PRON_ROWS.length, head, body, 'Pronostico_'+(PRON_FECHA||'')+'.pdf');
 }
 
-/* Exporta el pronóstico a CSV (se abre en Excel) con montos numéricos editables y el desglose Dr/Renasté. */
-function pronosticoCSV(){
+/* Exporta el pronóstico a Excel CON DISEÑO (tabla HTML estilizada que Excel abre como .xls):
+   encabezado con color, montos numéricos editables alineados, desglose Dr/Renasté y fila de totales. */
+function pronosticoExcel(){
   if(!PRON_ROWS.length){ pronMsg('Primero carga un día.','bad'); return; }
-  var head=['Hora','Paciente','Concepto','Terminal','Cargo de llegada','Cargo Dr.','Cargo Renasté','Nota'];
-  var rows=PRON_ROWS.map(function(r){
-    var dr=0, ren=0;
-    if(r.desglose&&r.desglose.length){ r.desglose.forEach(function(d){ if(d.terminal==='Renasté') ren+=d.monto; else dr+=d.monto; }); }
-    else if(r.cargoLlegada!=null){ if(r.terminal==='Renasté') ren=r.cargoLlegada; else dr=r.cargoLlegada; }
-    var verif=(r.cargoLlegada==null);
-    return [
-      r.hora||'', r.nombrePaciente||'', r.concepto||'', pronTerminalLabel(r.terminal),
-      verif?'verificar':Number(r.cargoLlegada).toFixed(2),
-      verif?'':dr.toFixed(2), verif?'':ren.toFixed(2), r.nota||''
-    ];
-  });
-  // Fila de totales al final (suma de lo numérico).
+  var fecha=fmtFecha(PRON_FECHA);
+  var NF="mso-number-format:'\\#\\,\\#\\#0\\.00'";   // formato de número $ #,##0.00 (editable)
+  function eX(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  // Totales
   var totDr=0, totRen=0, totGen=0;
   PRON_ROWS.forEach(function(r){
     if(r.cargoLlegada==null) return;
@@ -1427,12 +1419,58 @@ function pronosticoCSV(){
     if(r.desglose&&r.desglose.length){ r.desglose.forEach(function(d){ if(d.terminal==='Renasté') totRen+=d.monto; else totDr+=d.monto; }); }
     else if(r.terminal==='Renasté') totRen+=r.cargoLlegada; else totDr+=r.cargoLlegada;
   });
-  rows.push(['','','','TOTAL',totGen.toFixed(2),totDr.toFixed(2),totRen.toFixed(2),'']);
-  var cell=function(v){ v=String(v==null?'':v); return /[",\n;]/.test(v) ? ('"'+v.replace(/"/g,'""')+'"') : v; };
-  var csv=[head].concat(rows).map(function(r){ return r.map(cell).join(','); }).join('\r\n');
-  var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  var bord='border:0.5pt solid #d9d9d9;';
+  var th='background:#111111;color:#ffffff;font-weight:bold;padding:6px 8px;'+bord+'font-family:Calibri,Arial;';
+  var td='padding:5px 8px;'+bord+'font-family:Calibri,Arial;vertical-align:top;';
+  var num='padding:5px 8px;'+bord+'text-align:right;'+NF+';font-family:Calibri,Arial;';
+  // Encabezado/título
+  var html=''+
+  '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">'+
+  '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
+  '<x:Name>Pronostico</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>'+
+  '<body><table cellspacing="0" cellpadding="0" style="border-collapse:collapse">'+
+  '<tr><td colspan="8" style="font-size:15pt;font-weight:bold;font-family:Calibri,Arial;padding:6px 8px;color:#111111">Pronóstico de cobros</td></tr>'+
+  '<tr><td colspan="8" style="font-family:Calibri,Arial;padding:0 8px 8px;color:#555555">Dr. Miguel Soto&#160;&#160;|&#160;&#160;'+eX(fecha)+'&#160;&#160;|&#160;&#160;Citas: '+PRON_ROWS.length+'</td></tr>'+
+  '<tr>'+
+    '<td style="'+th+'">Hora</td><td style="'+th+'">Paciente</td><td style="'+th+'">Concepto</td>'+
+    '<td style="'+th+'">Terminal</td><td style="'+th+'text-align:right">Cargo de llegada</td>'+
+    '<td style="'+th+'text-align:right">Cargo Dr.</td><td style="'+th+'text-align:right">Cargo Renasté</td><td style="'+th+'">Nota</td>'+
+  '</tr>';
+  PRON_ROWS.forEach(function(r,i){
+    var dr=0, ren=0;
+    if(r.desglose&&r.desglose.length){ r.desglose.forEach(function(d){ if(d.terminal==='Renasté') ren+=d.monto; else dr+=d.monto; }); }
+    else if(r.cargoLlegada!=null){ if(r.terminal==='Renasté') ren=r.cargoLlegada; else dr=r.cargoLlegada; }
+    var verif=(r.cargoLlegada==null);
+    var zebra=(i%2)?'background:#f7f6f2;':'';
+    var grisCol=r.gris?'color:#999999;':'';
+    var cargoCell = verif
+      ? '<td style="'+td+zebra+'text-align:right;color:#c08a00;font-weight:bold">verificar</td>'
+      : '<td style="'+num+zebra+grisCol+'">'+Number(r.cargoLlegada).toFixed(2)+'</td>';
+    html+='<tr>'+
+      '<td style="'+td+zebra+grisCol+'white-space:nowrap">'+eX(r.hora||'')+'</td>'+
+      '<td style="'+td+zebra+grisCol+'font-weight:bold">'+eX(r.nombrePaciente||'')+'</td>'+
+      '<td style="'+td+zebra+grisCol+'">'+eX(r.concepto||'')+'</td>'+
+      '<td style="'+td+zebra+grisCol+'">'+eX(pronTerminalLabel(r.terminal))+'</td>'+
+      cargoCell+
+      '<td style="'+num+zebra+grisCol+'">'+(verif?'':dr.toFixed(2))+'</td>'+
+      '<td style="'+num+zebra+grisCol+'">'+(verif?'':ren.toFixed(2))+'</td>'+
+      '<td style="'+td+zebra+'color:#777777">'+eX(r.nota||'')+'</td>'+
+    '</tr>';
+  });
+  var totTd='padding:6px 8px;'+bord+'background:#efe9da;font-weight:bold;font-family:Calibri,Arial;';
+  var totNum=totTd+'text-align:right;'+NF;
+  html+='<tr>'+
+    '<td style="'+totTd+'"></td><td style="'+totTd+'"></td><td style="'+totTd+'"></td>'+
+    '<td style="'+totTd+'">TOTAL</td>'+
+    '<td style="'+totNum+'">'+totGen.toFixed(2)+'</td>'+
+    '<td style="'+totNum+'">'+totDr.toFixed(2)+'</td>'+
+    '<td style="'+totNum+'">'+totRen.toFixed(2)+'</td>'+
+    '<td style="'+totTd+'"></td>'+
+  '</tr>';
+  html+='</table></body></html>';
+  var blob=new Blob(['﻿'+html],{type:'application/vnd.ms-excel;charset=utf-8;'});
   var url=URL.createObjectURL(blob);
-  var a=document.createElement('a'); a.href=url; a.download='Pronostico_'+(PRON_FECHA||'')+'.csv';
+  var a=document.createElement('a'); a.href=url; a.download='Pronostico_'+(PRON_FECHA||'')+'.xls';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
 }
