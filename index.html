@@ -1578,7 +1578,7 @@ function pronosticoExcel(){
 /* =========================================================================
    REPORTES / DASHBOARD POR PERIODO
    ========================================================================= */
-var REP_DATA=null;
+var REP_DATA=null, REP_FILTER='';
 function repMsg(t,k){ var el=document.getElementById('repStatus'); if(el){ el.className='status '+(k||'info'); el.innerHTML=t; } }
 function repYmd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function repPreset(which){
@@ -1600,16 +1600,41 @@ function loadReporte(){
   repMsg('','info'); document.getElementById('repBtns').style.display='none'; document.getElementById('repStats').innerHTML='';
   google.script.run.withSuccessHandler(function(res){
     if(!res||!res.ok){ wrap.innerHTML='<div class="empty">No se pudo generar el reporte ('+esc((res&&res.error)||'?')+').</div>'; return; }
-    REP_DATA=res; renderReporte();
+    REP_DATA=res; REP_FILTER=''; renderReporte();
   }).withFailureHandler(function(err){ wrap.innerHTML='<div class="empty">Error: '+esc((err&&err.message)||err)+'</div>'; }).getReportePeriodo(d,h);
 }
 function repPeriodoTxt(){ return REP_DATA ? (fmtFecha(REP_DATA.desde)+' – '+fmtFecha(REP_DATA.hasta)) : ''; }
+var REP_COLORS=['#2f7d5b','#c08a3e','#4a6fa5','#a05195','#d45087','#7a8b3a','#00838f','#8a5a44'];
+function repDetalleFiltrado(){ if(!REP_DATA) return []; return REP_FILTER ? REP_DATA.detalle.filter(function(c){return c.linea===REP_FILTER;}) : REP_DATA.detalle; }
+function repSetFilter(v){ REP_FILTER=v||''; renderReporte(); }
+/* Gráfica de barras (HTML puro) de citas por línea de negocio. */
+function repChartHTML(){
+  var r=REP_DATA; if(!r.porLinea.length) return '';
+  var maxT=0; r.porLinea.forEach(function(x){ if(x.total>maxT)maxT=x.total; }); if(!maxT)maxT=1;
+  var h='<div style="margin:4px 0 16px;border:1px solid var(--line,#e7e3d8);border-radius:10px;padding:12px 14px">'+
+        '<div style="font-weight:600;margin-bottom:10px">Citas agendadas por línea de negocio</div>';
+  r.porLinea.forEach(function(x,i){
+    var pct=Math.round(x.total/maxT*100), col=REP_COLORS[i%REP_COLORS.length];
+    var pctTot=r.total?Math.round(x.total/r.total*100):0;
+    h+='<div style="display:flex;align-items:center;gap:8px;margin:5px 0">'+
+       '<div style="flex:0 0 190px;font-size:13px;text-align:right;color:#333">'+esc(x.linea)+'</div>'+
+       '<div style="flex:1;background:#f0ede4;border-radius:6px;height:20px;position:relative;overflow:hidden">'+
+       '<div style="width:'+pct+'%;background:'+col+';height:100%;border-radius:6px;min-width:2px"></div></div>'+
+       '<div style="flex:0 0 92px;font-size:13px;font-weight:700;color:#222">'+x.total+' <span style="font-weight:400;color:#888">('+pctTot+'%)</span></div>'+
+       '</div>';
+  });
+  h+='</div>';
+  return h;
+}
 function renderReporte(){
   var r=REP_DATA, wrap=document.getElementById('repWrap');
   function chip(l,n,k){ return '<div class="bstat bs-'+k+'"><div class="bn">'+n+'</div><div class="bl">'+esc(l)+'</div></div>'; }
   document.getElementById('repStats').innerHTML=
     chip('Citas agendadas',r.total,'t')+chip('Canceladas',r.canceladas,'r')+chip('Líneas de negocio',r.porLinea.length,'c');
-  var h='<div style="font-weight:600;margin-bottom:6px">Desglose por línea de negocio · agendadas '+esc(repPeriodoTxt())+'</div>';
+  // Gráfica
+  var h=repChartHTML();
+  // Desglose por línea
+  h+='<div style="font-weight:600;margin-bottom:6px">Desglose por línea de negocio · agendadas '+esc(repPeriodoTxt())+'</div>';
   h+='<table class="boardtable"><thead><tr><th>Línea de negocio</th><th style="text-align:right">Citas</th><th style="text-align:right">%</th><th style="text-align:right">Canceladas</th></tr></thead><tbody>';
   r.porLinea.forEach(function(x){
     var pct=r.total?Math.round(x.total/r.total*100):0;
@@ -1617,11 +1642,19 @@ function renderReporte(){
   });
   h+='<tr style="font-weight:700;background:#efe9da"><td>TOTAL</td><td style="text-align:right">'+r.total+'</td><td style="text-align:right">100%</td><td style="text-align:right">'+r.canceladas+'</td></tr>';
   h+='</tbody></table>';
-  h+='<div style="margin-top:16px;font-weight:600">Detalle de citas ('+r.detalle.length+')</div>';
-  h+='<table class="boardtable"><thead><tr><th>Agendado el</th><th>Paciente</th><th>Línea</th><th>Cita programada para</th><th>Descripción</th><th>Operativo</th><th>Estatus</th></tr></thead><tbody>';
-  r.detalle.forEach(function(c){
+  // Filtro por línea + detalle
+  var det=repDetalleFiltrado();
+  var opciones='<option value="">Todas las líneas</option>'+r.porLinea.map(function(x){ return '<option value="'+esc(x.linea)+'"'+(REP_FILTER===x.linea?' selected':'')+'>'+esc(x.linea)+' ('+x.total+')</option>'; }).join('');
+  h+='<div style="display:flex;align-items:center;gap:8px;margin-top:16px;flex-wrap:wrap">'+
+     '<span style="font-weight:600">Detalle de citas ('+det.length+')</span>'+
+     '<span style="margin-left:auto;font-size:13px;color:var(--muted)">Filtrar por línea:</span>'+
+     '<select onchange="repSetFilter(this.value)" style="padding:5px 8px;border-radius:8px;border:1px solid #d9d5c8">'+opciones+'</select>'+
+     '</div>';
+  h+='<table class="boardtable" style="margin-top:6px"><thead><tr><th>Agendado el</th><th>Paciente</th><th>Línea</th><th>Cita programada para</th><th>Descripción</th><th>Operativo</th><th>Estatus</th></tr></thead><tbody>';
+  det.forEach(function(c){
     h+='<tr><td class="nowrap">'+esc(c.agendadoFecha)+' '+esc(c.agendadoHora||'')+'</td><td><b>'+esc(c.paciente)+'</b></td><td>'+esc(c.linea)+'</td><td class="nowrap">'+esc(c.citaFecha||'')+' '+esc(c.citaHora||'')+'</td><td>'+esc(c.descripcion||'')+'</td><td>'+esc(c.operativo||'')+'</td><td>'+esc(c.estatus||'')+'</td></tr>';
   });
+  if(!det.length) h+='<tr><td colspan="7" class="sub" style="text-align:center;padding:10px">Sin citas para esa línea.</td></tr>';
   h+='</tbody></table>';
   wrap.innerHTML=h;
   document.getElementById('repBtns').style.display='flex';
@@ -1630,9 +1663,10 @@ function reporteDashPDF(){
   if(!REP_DATA){ repMsg('Primero genera el reporte.','bad'); return; }
   var r=REP_DATA;
   var resumen=r.porLinea.map(function(x){ return limpiaPDF(x.linea)+': '+x.total; }).join('  ·  ');
-  var sub='Dr. Miguel Soto   |   Agendadas: '+repPeriodoTxt()+'   |   Total: '+r.total+'   Canceladas: '+r.canceladas+'\nPor línea:  '+resumen;
+  var filtroTxt=REP_FILTER?('   |   Filtro: '+limpiaPDF(REP_FILTER)):'';
+  var sub='Dr. Miguel Soto   |   Agendadas: '+repPeriodoTxt()+'   |   Total: '+r.total+'   Canceladas: '+r.canceladas+filtroTxt+'\nPor línea:  '+resumen;
   var head=['Agendado el','Paciente','Línea de negocio','Cita para','Descripción','Operativo','Estatus'];
-  var body=r.detalle.map(function(c){ return [(c.agendadoFecha||'')+' '+(c.agendadoHora||''), limpiaPDF(c.paciente), limpiaPDF(c.linea), (c.citaFecha||'')+' '+(c.citaHora||''), limpiaPDF(c.descripcion), limpiaPDF(c.operativo), limpiaPDF(c.estatus)]; });
+  var body=repDetalleFiltrado().map(function(c){ return [(c.agendadoFecha||'')+' '+(c.agendadoHora||''), limpiaPDF(c.paciente), limpiaPDF(c.linea), (c.citaFecha||'')+' '+(c.citaHora||''), limpiaPDF(c.descripcion), limpiaPDF(c.operativo), limpiaPDF(c.estatus)]; });
   descargarPDF('Reporte de citas agendadas (ventas)', sub, head, body, 'Reporte_agendadas_'+(r.desde||'')+'_a_'+(r.hasta||'')+'.pdf');
 }
 function reporteDashExcel(){
@@ -1659,9 +1693,10 @@ function reporteDashExcel(){
   });
   html+='<tr><td style="'+tot+'">TOTAL</td><td style="'+tot+'text-align:right">'+r.total+'</td><td style="'+tot+'text-align:right">100%</td><td style="'+tot+'text-align:right">'+r.canceladas+'</td><td colspan="3" style="'+tot+'"></td></tr>';
   html+='<tr><td colspan="7" style="padding:8px"></td></tr>';
-  html+='<tr><td colspan="7" style="font-weight:bold;font-family:Calibri,Arial;padding:4px 8px;color:#111111">Detalle de citas ('+r.detalle.length+')</td></tr>';
+  var _det=repDetalleFiltrado();
+  html+='<tr><td colspan="7" style="font-weight:bold;font-family:Calibri,Arial;padding:4px 8px;color:#111111">Detalle de citas ('+_det.length+')'+(REP_FILTER?(' — filtro: '+eX(REP_FILTER)):'')+'</td></tr>';
   html+='<tr><td style="'+th+'">Agendado el</td><td style="'+th+'">Paciente</td><td style="'+th+'">Línea de negocio</td><td style="'+th+'">Cita programada para</td><td style="'+th+'">Descripción</td><td style="'+th+'">Operativo</td><td style="'+th+'">Estatus</td></tr>';
-  r.detalle.forEach(function(c,i){
+  _det.forEach(function(c,i){
     var zebra=(i%2)?'background:#f7f6f2;':'';
     html+='<tr><td style="'+td+zebra+'white-space:nowrap">'+eX((c.agendadoFecha||'')+' '+(c.agendadoHora||''))+'</td><td style="'+td+zebra+'font-weight:bold">'+eX(c.paciente||'')+'</td><td style="'+td+zebra+'">'+eX(c.linea||'')+'</td><td style="'+td+zebra+'white-space:nowrap">'+eX((c.citaFecha||'')+' '+(c.citaHora||''))+'</td><td style="'+td+zebra+'">'+eX(c.descripcion||'')+'</td><td style="'+td+zebra+'">'+eX(c.operativo||'')+'</td><td style="'+td+zebra+'">'+eX(c.estatus||'')+'</td></tr>';
   });
@@ -1686,9 +1721,9 @@ function reporteDashCSV(){
   r.porLinea.forEach(function(x){ var pct=r.total?Math.round(x.total/r.total*100):0; lines.push([x.linea,x.total,pct+'%',x.canceladas].map(cell).join(',')); });
   lines.push(['TOTAL',r.total,'100%',r.canceladas].map(cell).join(','));
   lines.push('');
-  lines.push(['Detalle de citas'].map(cell).join(','));
+  lines.push(['Detalle de citas'+(REP_FILTER?(' — filtro: '+REP_FILTER):'')].map(cell).join(','));
   lines.push(['Agendado el','Hora agendado','Paciente','Línea de negocio','Cita programada para','Descripción','Operativo','Estatus'].map(cell).join(','));
-  r.detalle.forEach(function(c){ lines.push([c.agendadoFecha||'',c.agendadoHora||'',c.paciente||'',c.linea||'',(c.citaFecha||'')+' '+(c.citaHora||''),c.descripcion||'',c.operativo||'',c.estatus||''].map(cell).join(',')); });
+  repDetalleFiltrado().forEach(function(c){ lines.push([c.agendadoFecha||'',c.agendadoHora||'',c.paciente||'',c.linea||'',(c.citaFecha||'')+' '+(c.citaHora||''),c.descripcion||'',c.operativo||'',c.estatus||''].map(cell).join(',')); });
   var csv=lines.join('\r\n');
   var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
   var url=URL.createObjectURL(blob);
