@@ -337,6 +337,7 @@ function initGsi(){
         <span id="damianMsg" style="font-size:12px;color:var(--muted);align-self:center"></span>
         <button type="button" class="btn ghost" onclick="reportePantalla()">📋 Reporte en pantalla</button>
         <button type="button" class="btn ghost" onclick="reportePDF()">📄 PDF programación completa</button>
+        <button type="button" class="btn ghost" onclick="reporteExcel()">📊 Descargar Excel</button>
         <button type="button" class="btn ghost" onclick="reporteWhatsapp()">📲 WhatsApp programación</button>
         <button type="button" class="btn ghost" onclick="reporteEmail()">✉️ Correo</button>
         <button type="button" class="btn ghost" onclick="reportePDFAnestesia()">🩺 PDF Anestesia (Dra. Karen)</button>
@@ -1062,6 +1063,51 @@ function abrirPDF(rows, titulo, subtitulo){
 function reportePDF(){
   if(!BOARD_ROWS.length && !DAMIAN_ROWS.length){ boardMsg('Primero carga un día.','bad'); return; }
   abrirPDF(filasHomologadas(),'Programación del día','Dr. Miguel Soto · Cirujano Plástico Certificado');
+}
+/* Descarga la programación del día en Excel CON DISEÑO (tabla HTML estilizada, editable). */
+function reporteExcel(){
+  if(!BOARD_ROWS.length && !DAMIAN_ROWS.length){ boardMsg('Primero carga un día.','bad'); return; }
+  var rows=filasHomologadas();
+  var fechaVal=document.getElementById('boardDate').value||'';
+  var fecha=fmtFecha(fechaVal);
+  var c={Pendiente:0,Confirmada:0,'No Contesta':0,Cancelada:0,Reagendada:0};
+  rows.forEach(function(r){ if(c[r.estatus]!==undefined)c[r.estatus]++; });
+  function eX(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function estBg(e){ e=String(e||''); if(/confirmad/i.test(e))return '#e6f4ea'; if(/no contesta/i.test(e))return '#fce8e6'; if(/cancelad/i.test(e))return '#eeeeee'; if(/reagendad/i.test(e))return '#fff1e0'; return '#eef2fb'; }
+  var bord='border:0.5pt solid #d9d9d9;';
+  var th='background:#111111;color:#ffffff;font-weight:bold;padding:6px 8px;'+bord+'font-family:Calibri,Arial;';
+  var td='padding:5px 8px;'+bord+'font-family:Calibri,Arial;vertical-align:top;';
+  var html=''+
+  '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">'+
+  '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
+  '<x:Name>Programacion</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>'+
+  '<body><table cellspacing="0" cellpadding="0" style="border-collapse:collapse">'+
+  '<tr><td colspan="7" style="font-size:15pt;font-weight:bold;font-family:Calibri,Arial;padding:6px 8px;color:#111111">Programación del día</td></tr>'+
+  '<tr><td colspan="7" style="font-family:Calibri,Arial;padding:0 8px 8px;color:#555555">Dr. Miguel Soto · Cirujano Plástico Certificado&#160;&#160;|&#160;&#160;'+eX(fecha)+'&#160;&#160;|&#160;&#160;Total: '+rows.length+'&#160;&#160;·&#160;&#160;Confirmadas: '+c.Confirmada+'&#160;&#160;Pendientes: '+c.Pendiente+'&#160;&#160;No contesta: '+c['No Contesta']+'&#160;&#160;Canceladas: '+c.Cancelada+'&#160;&#160;Reagendadas: '+c.Reagendada+'</td></tr>'+
+  '<tr>'+
+    '<td style="'+th+'">Hora</td><td style="'+th+'">Paciente</td><td style="'+th+'">Línea de negocio</td>'+
+    '<td style="'+th+'">Descripción</td><td style="'+th+'">Área</td><td style="'+th+'">Operativo</td><td style="'+th+'">Estatus</td>'+
+  '</tr>';
+  rows.forEach(function(r,i){
+    var zebra=(i%2)?'background:#f7f6f2;':'';
+    var hora=(r.horaIni||'')+(r.horaFin?('-'+r.horaFin):'');
+    var pac=(r.externa?'(Damián) ':'')+(r.paciente||'');
+    html+='<tr>'+
+      '<td style="'+td+zebra+'white-space:nowrap">'+eX(hora)+'</td>'+
+      '<td style="'+td+zebra+'font-weight:bold">'+eX(pac)+'</td>'+
+      '<td style="'+td+zebra+'">'+eX(r.linea||'')+'</td>'+
+      '<td style="'+td+zebra+'">'+eX(r.descripcion||'')+'</td>'+
+      '<td style="'+td+zebra+'">'+eX(r.area||'')+'</td>'+
+      '<td style="'+td+zebra+'">'+eX(r.operativo||'')+'</td>'+
+      '<td style="'+td+'background:'+estBg(r.estatus)+';font-weight:bold">'+eX(r.estatus||'')+'</td>'+
+    '</tr>';
+  });
+  html+='</table></body></html>';
+  var blob=new Blob(['﻿'+html],{type:'application/vnd.ms-excel;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download='Programacion_'+fechaVal+'.xls';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
 }
 /* Casos que requieren anestesióloga (General/Sedación o línea Anestesia/VPA) — para Dra. Karen García.
    Incluye tus citas + las cirugías de la Dra. Damián con sedación/general (si importaste su hoja). */
