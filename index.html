@@ -30,7 +30,8 @@ function setupShim(){
     getDamianSheet:    function(){ return {a:'damianSheet', p:{}}; },
     setAttendance:     function(p){ return {a:'setAttendance', p:p}; },
     getCotizaciones:   function(id,nombre){ return {a:'cotizaciones', p:{pacienteId:id, pacienteNombre:nombre}}; },
-    getPronostico:     function(fecha){ return {a:'pronostico', p:{fecha:fecha}}; }
+    getPronostico:     function(fecha){ return {a:'pronostico', p:{fecha:fecha}}; },
+    getReportePeriodo: function(desde,hasta){ return {a:'reportePeriodo', p:{desde:desde, hasta:hasta}}; }
   };
   window.google = window.google || {};
   window.google.script = window.google.script || {};
@@ -271,6 +272,7 @@ function initGsi(){
     <button type="button" class="navbtn" id="navCitas" onclick="showView('citas')">🔧 Buscar / editar cita</button>
     <button type="button" class="navbtn" id="navAsist" onclick="showView('asistencia')">🗒️ Asistencia del día</button>
     <button type="button" class="navbtn" id="navPron" onclick="showView('pronostico')">💰 Pronóstico de cobros</button>
+    <button type="button" class="navbtn" id="navRep" onclick="showView('reportes')">📈 Reportes</button>
   </div>
 
   <div id="viewAgendar">
@@ -403,6 +405,37 @@ function initGsi(){
       <div class="boardreport" id="asistBtns" style="display:none">
         <button type="button" class="btn ghost" onclick="asistenciaPDF()">📄 Imprimir registro / PDF</button>
         <button type="button" class="btn ghost" onclick="asistenciaCSV()">📊 Descargar para Google Sheets</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="viewReportes" style="display:none">
+    <div class="card">
+      <div class="boardhead">
+        <div>
+          <h2 style="margin:0">Reportes de citas agendadas (ventas)</h2>
+          <div class="hint">Cuántas citas se <b>registraron</b> en el periodo (por el día en que se agendó, no el día de la cita), en total y por línea de negocio. Excluye Dra. Damián.</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px">
+        <button type="button" class="btn ghost" onclick="repPreset('hoy')">Hoy</button>
+        <button type="button" class="btn ghost" onclick="repPreset('semana')">Esta semana</button>
+        <button type="button" class="btn ghost" onclick="repPreset('mes')">Este mes</button>
+        <button type="button" class="btn ghost" onclick="repPreset('trimestre')">Este trimestre</button>
+        <button type="button" class="btn ghost" onclick="repPreset('anio')">Este año</button>
+      </div>
+      <div class="boarddate" style="flex-wrap:wrap;gap:8px">
+        <label style="font-size:13px;color:var(--muted)">Desde <input type="date" id="repDesde"></label>
+        <label style="font-size:13px;color:var(--muted)">Hasta <input type="date" id="repHasta"></label>
+        <button type="button" class="btn primary" onclick="loadReporte()">Generar reporte</button>
+      </div>
+      <div class="status" id="repStatus"></div>
+      <div class="boardstats" id="repStats"></div>
+      <div id="repWrap"><div class="empty">Elige un periodo y genera el reporte.</div></div>
+      <div class="boardreport" id="repBtns" style="display:none">
+        <button type="button" class="btn ghost" onclick="reporteDashPDF()">📄 Descargar PDF</button>
+        <button type="button" class="btn ghost" onclick="reporteDashExcel()">📊 Descargar Excel</button>
+        <button type="button" class="btn ghost" onclick="reporteDashCSV()">📊 Descargar para Google Sheets</button>
       </div>
     </div>
   </div>
@@ -878,8 +911,8 @@ function fail(err){ var st=document.getElementById("status"); if(st){ st.classNa
    ========================================================================= */
 var BOARD_ROWS=[];
 function showView(which){
-  var map={agendar:'viewAgendar',board:'viewBoard',citas:'viewCitas',asistencia:'viewAsistencia',pronostico:'viewPronostico'};
-  var nav={agendar:'navAgendar',board:'navBoard',citas:'navCitas',asistencia:'navAsist',pronostico:'navPron'};
+  var map={agendar:'viewAgendar',board:'viewBoard',citas:'viewCitas',asistencia:'viewAsistencia',pronostico:'viewPronostico',reportes:'viewReportes'};
+  var nav={agendar:'navAgendar',board:'navBoard',citas:'navCitas',asistencia:'navAsist',pronostico:'navPron',reportes:'navRep'};
   Object.keys(map).forEach(function(k){
     var v=document.getElementById(map[k]); if(v) v.style.display=(k===which)?'block':'none';
     var n=document.getElementById(nav[k]); if(n) n.classList.toggle('active',k===which);
@@ -887,6 +920,7 @@ function showView(which){
   if(which==='board'){ var d=document.getElementById('boardDate'); if(d&&!d.value) d.value=todayStr(); }
   if(which==='asistencia'){ var da=document.getElementById('asistDate'); if(da&&!da.value) da.value=todayStr(); }
   if(which==='pronostico'){ var dp=document.getElementById('pronDate'); if(dp&&!dp.value) dp.value=mananaStr(); }
+  if(which==='reportes'){ var rd=document.getElementById('repDesde'), rh=document.getElementById('repHasta'); if(rd&&!rd.value){ repPreset('mes'); } }
 }
 function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtFecha(d){
@@ -1537,6 +1571,128 @@ function pronosticoExcel(){
   var blob=new Blob(['﻿'+html],{type:'application/vnd.ms-excel;charset=utf-8;'});
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a'); a.href=url; a.download='Pronostico_'+(PRON_FECHA||'')+'.xls';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+}
+
+/* =========================================================================
+   REPORTES / DASHBOARD POR PERIODO
+   ========================================================================= */
+var REP_DATA=null;
+function repMsg(t,k){ var el=document.getElementById('repStatus'); if(el){ el.className='status '+(k||'info'); el.innerHTML=t; } }
+function repYmd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function repPreset(which){
+  var now=new Date(), desde, hasta;
+  if(which==='hoy'){ desde=new Date(now); hasta=new Date(now); }
+  else if(which==='semana'){ var dow=(now.getDay()+6)%7; desde=new Date(now); desde.setDate(now.getDate()-dow); hasta=new Date(desde); hasta.setDate(desde.getDate()+6); }
+  else if(which==='mes'){ desde=new Date(now.getFullYear(),now.getMonth(),1); hasta=new Date(now.getFullYear(),now.getMonth()+1,0); }
+  else if(which==='trimestre'){ var q=Math.floor(now.getMonth()/3); desde=new Date(now.getFullYear(),q*3,1); hasta=new Date(now.getFullYear(),q*3+3,0); }
+  else if(which==='anio'){ desde=new Date(now.getFullYear(),0,1); hasta=new Date(now.getFullYear(),11,31); }
+  else { return; }
+  document.getElementById('repDesde').value=repYmd(desde);
+  document.getElementById('repHasta').value=repYmd(hasta);
+}
+function loadReporte(){
+  var d=document.getElementById('repDesde').value, h=document.getElementById('repHasta').value;
+  if(!d||!h){ repMsg('Elige el rango (desde / hasta).','bad'); return; }
+  if(d>h){ repMsg('La fecha "desde" no puede ser mayor que "hasta".','bad'); return; }
+  var wrap=document.getElementById('repWrap'); wrap.innerHTML='<div class="empty">Contando citas del periodo…</div>';
+  repMsg('','info'); document.getElementById('repBtns').style.display='none'; document.getElementById('repStats').innerHTML='';
+  google.script.run.withSuccessHandler(function(res){
+    if(!res||!res.ok){ wrap.innerHTML='<div class="empty">No se pudo generar el reporte ('+esc((res&&res.error)||'?')+').</div>'; return; }
+    REP_DATA=res; renderReporte();
+  }).withFailureHandler(function(err){ wrap.innerHTML='<div class="empty">Error: '+esc((err&&err.message)||err)+'</div>'; }).getReportePeriodo(d,h);
+}
+function repPeriodoTxt(){ return REP_DATA ? (fmtFecha(REP_DATA.desde)+' – '+fmtFecha(REP_DATA.hasta)) : ''; }
+function renderReporte(){
+  var r=REP_DATA, wrap=document.getElementById('repWrap');
+  function chip(l,n,k){ return '<div class="bstat bs-'+k+'"><div class="bn">'+n+'</div><div class="bl">'+esc(l)+'</div></div>'; }
+  document.getElementById('repStats').innerHTML=
+    chip('Citas agendadas',r.total,'t')+chip('Canceladas',r.canceladas,'r')+chip('Líneas de negocio',r.porLinea.length,'c');
+  var h='<div style="font-weight:600;margin-bottom:6px">Desglose por línea de negocio · agendadas '+esc(repPeriodoTxt())+'</div>';
+  h+='<table class="boardtable"><thead><tr><th>Línea de negocio</th><th style="text-align:right">Citas</th><th style="text-align:right">%</th><th style="text-align:right">Canceladas</th></tr></thead><tbody>';
+  r.porLinea.forEach(function(x){
+    var pct=r.total?Math.round(x.total/r.total*100):0;
+    h+='<tr><td><b>'+esc(x.linea)+'</b></td><td style="text-align:right">'+x.total+'</td><td style="text-align:right">'+pct+'%</td><td style="text-align:right">'+x.canceladas+'</td></tr>';
+  });
+  h+='<tr style="font-weight:700;background:#efe9da"><td>TOTAL</td><td style="text-align:right">'+r.total+'</td><td style="text-align:right">100%</td><td style="text-align:right">'+r.canceladas+'</td></tr>';
+  h+='</tbody></table>';
+  h+='<div style="margin-top:16px;font-weight:600">Detalle de citas ('+r.detalle.length+')</div>';
+  h+='<table class="boardtable"><thead><tr><th>Agendado el</th><th>Paciente</th><th>Línea</th><th>Cita programada para</th><th>Descripción</th><th>Operativo</th><th>Estatus</th></tr></thead><tbody>';
+  r.detalle.forEach(function(c){
+    h+='<tr><td class="nowrap">'+esc(c.agendadoFecha)+' '+esc(c.agendadoHora||'')+'</td><td><b>'+esc(c.paciente)+'</b></td><td>'+esc(c.linea)+'</td><td class="nowrap">'+esc(c.citaFecha||'')+' '+esc(c.citaHora||'')+'</td><td>'+esc(c.descripcion||'')+'</td><td>'+esc(c.operativo||'')+'</td><td>'+esc(c.estatus||'')+'</td></tr>';
+  });
+  h+='</tbody></table>';
+  wrap.innerHTML=h;
+  document.getElementById('repBtns').style.display='flex';
+}
+function reporteDashPDF(){
+  if(!REP_DATA){ repMsg('Primero genera el reporte.','bad'); return; }
+  var r=REP_DATA;
+  var resumen=r.porLinea.map(function(x){ return limpiaPDF(x.linea)+': '+x.total; }).join('  ·  ');
+  var sub='Dr. Miguel Soto   |   Agendadas: '+repPeriodoTxt()+'   |   Total: '+r.total+'   Canceladas: '+r.canceladas+'\nPor línea:  '+resumen;
+  var head=['Agendado el','Paciente','Línea de negocio','Cita para','Descripción','Operativo','Estatus'];
+  var body=r.detalle.map(function(c){ return [(c.agendadoFecha||'')+' '+(c.agendadoHora||''), limpiaPDF(c.paciente), limpiaPDF(c.linea), (c.citaFecha||'')+' '+(c.citaHora||''), limpiaPDF(c.descripcion), limpiaPDF(c.operativo), limpiaPDF(c.estatus)]; });
+  descargarPDF('Reporte de citas agendadas (ventas)', sub, head, body, 'Reporte_agendadas_'+(r.desde||'')+'_a_'+(r.hasta||'')+'.pdf');
+}
+function reporteDashExcel(){
+  if(!REP_DATA){ repMsg('Primero genera el reporte.','bad'); return; }
+  var r=REP_DATA;
+  function eX(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  var bord='border:0.5pt solid #d9d9d9;';
+  var th='background:#111111;color:#ffffff;font-weight:bold;padding:6px 8px;'+bord+'font-family:Calibri,Arial;';
+  var td='padding:5px 8px;'+bord+'font-family:Calibri,Arial;vertical-align:top;';
+  var tot='padding:6px 8px;'+bord+'background:#efe9da;font-weight:bold;font-family:Calibri,Arial;';
+  var html=''+
+  '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">'+
+  '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
+  '<x:Name>Reporte</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>'+
+  '<body><table cellspacing="0" cellpadding="0" style="border-collapse:collapse">'+
+  '<tr><td colspan="7" style="font-size:15pt;font-weight:bold;font-family:Calibri,Arial;padding:6px 8px;color:#111111">Reporte de citas agendadas</td></tr>'+
+  '<tr><td colspan="7" style="font-family:Calibri,Arial;padding:0 8px 10px;color:#555555">Dr. Miguel Soto&#160;&#160;|&#160;&#160;Agendadas: '+eX(repPeriodoTxt())+'&#160;&#160;|&#160;&#160;Total citas: '+r.total+'&#160;&#160;·&#160;&#160;Canceladas: '+r.canceladas+'</td></tr>'+
+  '<tr><td colspan="7" style="font-weight:bold;font-family:Calibri,Arial;padding:4px 8px;color:#111111">Desglose por línea de negocio</td></tr>'+
+  '<tr><td style="'+th+'">Línea de negocio</td><td style="'+th+'text-align:right">Citas</td><td style="'+th+'text-align:right">%</td><td style="'+th+'text-align:right">Canceladas</td><td colspan="3" style="'+th+'"></td></tr>';
+  r.porLinea.forEach(function(x,i){
+    var zebra=(i%2)?'background:#f7f6f2;':'';
+    var pct=r.total?Math.round(x.total/r.total*100):0;
+    html+='<tr><td style="'+td+zebra+'font-weight:bold">'+eX(x.linea)+'</td><td style="'+td+zebra+'text-align:right">'+x.total+'</td><td style="'+td+zebra+'text-align:right">'+pct+'%</td><td style="'+td+zebra+'text-align:right">'+x.canceladas+'</td><td colspan="3" style="'+td+zebra+'"></td></tr>';
+  });
+  html+='<tr><td style="'+tot+'">TOTAL</td><td style="'+tot+'text-align:right">'+r.total+'</td><td style="'+tot+'text-align:right">100%</td><td style="'+tot+'text-align:right">'+r.canceladas+'</td><td colspan="3" style="'+tot+'"></td></tr>';
+  html+='<tr><td colspan="7" style="padding:8px"></td></tr>';
+  html+='<tr><td colspan="7" style="font-weight:bold;font-family:Calibri,Arial;padding:4px 8px;color:#111111">Detalle de citas ('+r.detalle.length+')</td></tr>';
+  html+='<tr><td style="'+th+'">Agendado el</td><td style="'+th+'">Paciente</td><td style="'+th+'">Línea de negocio</td><td style="'+th+'">Cita programada para</td><td style="'+th+'">Descripción</td><td style="'+th+'">Operativo</td><td style="'+th+'">Estatus</td></tr>';
+  r.detalle.forEach(function(c,i){
+    var zebra=(i%2)?'background:#f7f6f2;':'';
+    html+='<tr><td style="'+td+zebra+'white-space:nowrap">'+eX((c.agendadoFecha||'')+' '+(c.agendadoHora||''))+'</td><td style="'+td+zebra+'font-weight:bold">'+eX(c.paciente||'')+'</td><td style="'+td+zebra+'">'+eX(c.linea||'')+'</td><td style="'+td+zebra+'white-space:nowrap">'+eX((c.citaFecha||'')+' '+(c.citaHora||''))+'</td><td style="'+td+zebra+'">'+eX(c.descripcion||'')+'</td><td style="'+td+zebra+'">'+eX(c.operativo||'')+'</td><td style="'+td+zebra+'">'+eX(c.estatus||'')+'</td></tr>';
+  });
+  html+='</table></body></html>';
+  var blob=new Blob(['﻿'+html],{type:'application/vnd.ms-excel;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download='Reporte_'+(r.desde||'')+'_a_'+(r.hasta||'')+'.xls';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+}
+function reporteDashCSV(){
+  if(!REP_DATA){ repMsg('Primero genera el reporte.','bad'); return; }
+  var r=REP_DATA;
+  var cell=function(v){ v=String(v==null?'':v); return /[",\n;]/.test(v) ? ('"'+v.replace(/"/g,'""')+'"') : v; };
+  var lines=[];
+  lines.push(['Reporte de citas agendadas (ventas)'].map(cell).join(','));
+  lines.push(['Periodo (fecha en que se agendó)', repPeriodoTxt()].map(cell).join(','));
+  lines.push(['Total citas agendadas', r.total].map(cell).join(','));
+  lines.push(['Canceladas', r.canceladas].map(cell).join(','));
+  lines.push('');
+  lines.push(['Línea de negocio','Citas','%','Canceladas'].map(cell).join(','));
+  r.porLinea.forEach(function(x){ var pct=r.total?Math.round(x.total/r.total*100):0; lines.push([x.linea,x.total,pct+'%',x.canceladas].map(cell).join(',')); });
+  lines.push(['TOTAL',r.total,'100%',r.canceladas].map(cell).join(','));
+  lines.push('');
+  lines.push(['Detalle de citas'].map(cell).join(','));
+  lines.push(['Agendado el','Hora agendado','Paciente','Línea de negocio','Cita programada para','Descripción','Operativo','Estatus'].map(cell).join(','));
+  r.detalle.forEach(function(c){ lines.push([c.agendadoFecha||'',c.agendadoHora||'',c.paciente||'',c.linea||'',(c.citaFecha||'')+' '+(c.citaHora||''),c.descripcion||'',c.operativo||'',c.estatus||''].map(cell).join(',')); });
+  var csv=lines.join('\r\n');
+  var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a'); a.href=url; a.download='Reporte_agendadas_'+(r.desde||'')+'_a_'+(r.hasta||'')+'.csv';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
 }
