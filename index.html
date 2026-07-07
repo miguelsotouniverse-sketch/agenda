@@ -445,6 +445,8 @@ function initGsi(){
 var CAT={}, CALLBL={}, current="consulta", selectedPatient=null, searchTimer=null;
 var EDIT_CTX=null;   // cuando se está editando una cita existente: {calId, eventId}
 var cotizaciones=[], selectedCotizacion=null;   // cotizaciones aceptadas del paciente (cirugía)
+// "Paciente" sintético para el Evento Personal del Dr. (no requiere expediente).
+var PERSONAL_PATIENT={id:'PERSONAL-MS',nombre:'Dr. Miguel Soto',telefono:'NA',correo:'',nacimiento:'',residencia:'',apodo:'',genero:'',edad:'',interes:'',referido:'',asesor:'',categoria:'',satisfaccion:'',comentarios:''};
 
 /* ===== arranque (se llama tras iniciar sesión con Google) ===== */
 function startApp(){
@@ -551,7 +553,14 @@ function buildTypes(){
         {k:"qx_fecha",l:"Fecha Cirugía",t:"date",req:true},{k:"qx_hora",l:"Hora Cirugía",t:"time",req:true},
         {k:"qx_dur",l:"Duración Qx (min)",t:"number",req:true,val:180},
         {k:"ingreso",l:"Hora ingreso hospitalario",t:"time"}
-      ], tail:TAIL}
+      ], tail:TAIL},
+    personal:{label:"Evento Personal Dr. Soto",icon:"🔒",hint:"Bloquea el tiempo del Dr. Soto: no se podrá agendar consulta ni cirugía que empalme.",noPatient:true,
+      cal:function(){return CALLBL.consulta;}, dur:function(){return 60;},
+      common:[], motivo:[],
+      specific:[
+        {k:"titulo",l:"Título / motivo del evento",t:"text",ph:"Ej. Junta, viaje, compromiso personal…"},
+        {k:"observaciones",l:"Notas (opcional)",t:"textarea"}
+      ], schedule:SCHEDULE, tail:[]}
   };
 }
 
@@ -598,6 +607,10 @@ function group(label,fields){
 }
 function renderForm(){
   var t=TYPES[current];
+  // Evento personal: no requiere expediente → se usa un "paciente" sintético (el Dr.) y se oculta el buscador.
+  if(t.noPatient){ if(selectedPatient!==PERSONAL_PATIENT) selectedPatient=PERSONAL_PATIENT; }
+  else if(selectedPatient===PERSONAL_PATIENT){ selectedPatient=null; }
+  var gate=document.getElementById("gate"); if(gate) gate.style.display = t.noPatient ? "none" : "";
   document.getElementById("formTitle").textContent=t.icon+" "+t.label;
   document.getElementById("formHint").textContent=t.hint;
   document.getElementById("formWrap").style.display = selectedPatient ? "block":"none";
@@ -740,8 +753,16 @@ function clearPatient(){ selectedPatient=null; selectedCotizacion=null; cotizaci
 /* ===== preview cliente (informativo) ===== */
 function buildClientEvents(f){
   var t=TYPES[current], p=selectedPatient;
-  var sum='👤 Paciente: '+titleCase(p.nombre)+' 📱 Teléfono: '+p.telefono+' 🧑🏻‍⚕️ Médico Tratante: '+(f.medico||"—");
   function L(a,b){return (b&&String(b).trim())?(a+': '+b):null;}
+  if(t.noPatient){
+    var tituloP=(f.titulo&&f.titulo.trim())?f.titulo:'Evento Personal';
+    var descP=['🩺 Motivo de visita: Evento Personal',
+      '🔒 EVENTO PERSONAL — Dr. Miguel Soto NO disponible (ni consulta ni cirugía)',
+      '👤 Operativo: Dr. Miguel Soto','🏥 Médico Titular: Dr. Miguel Soto',
+      L('📝 Detalle',f.titulo),L('❗️ Notas',f.observaciones),'☑️ Agenda: '+(CURRENT_AGENDA||'—')].filter(Boolean).join('\n');
+    return [{cal:CALLBL.consulta,sum:'🔒 Evento Personal — Dr. Miguel Soto — '+tituloP,when:(f.fecha||'?')+' '+(f.hora||'?')+' ('+(f.duracion||'?')+' min)',desc:descP}];
+  }
+  var sum='👤 Paciente: '+titleCase(p.nombre)+' 📱 Teléfono: '+p.telefono+' 🧑🏻‍⚕️ Médico Tratante: '+(f.medico||"—");
   if(t.surgery){
     var cirTxt = selectedCotizacion ? (((selectedCotizacion.procedimientos||[]).join(' + ')||('Cotización '+selectedCotizacion.folio))+' ['+selectedCotizacion.folio+']') : (f.cirugia||'—');
     var cirujano=f.medico||'—', anest=f.vpa_operativo||'Dra. Karen García';
