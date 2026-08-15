@@ -1192,7 +1192,7 @@ function damRequiereAnestesia(r){
   if(/general|sedaci/.test(a)) return true;                                   // anestesia que sí requiere anestesióloga
   if(/^(local|na|n\/a|ninguna|sin anestesia|topica|tópica)$/.test(a)) return false;   // explícitamente no la requiere
   var d=String(r.descripcion||'').toLowerCase();
-  if(/revisi|valoraci|consulta|retoque|retiro de punto|puntos|curaci|spectra|breast boutique|control|seguimiento|virtual|depilaci|l[aá]ser|fibrosis|\bfz\b|pruc|botox|b[oó]tox|relleno|inyec|facial/.test(d)) return false; // no quirúrgico / estético
+  if(/revisi|valoraci|consulta|dudas|aclaraci|pl[aá]tica|informativ|orientaci|presupuesto|cotizaci|retoque|retiro de punto|puntos|curaci|spectra|breast boutique|control|seguimiento|virtual|depilaci|l[aá]ser|fibrosis|\bfz\b|pruc|botox|b[oó]tox|relleno|inyec|facial/.test(d)) return false; // no quirúrgico / estético (consultas, revisiones, dudas, etc.)
   return true;   // procedimiento quirúrgico de Damián → Karen debe estar enterada
 }
 /* Casos que requieren anestesióloga (General/Sedación o línea Anestesia/VPA) — para Dra. Karen García.
