@@ -1184,13 +1184,24 @@ function reporteCSV(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
 }
+/* ¿Una cita de la Dra. Damián requiere que la Dra. Karen (anestesióloga) esté enterada?
+   Sí para cirugías/sedaciones; NO para lo que claramente no lleva anestesióloga
+   (revisiones, valoraciones, consultas, retoques, retiro de puntos, curaciones, láser/spectra, etc.). */
+function damRequiereAnestesia(r){
+  var a=String(r.anestesia||'').toLowerCase().trim();
+  if(/general|sedaci/.test(a)) return true;                                   // anestesia que sí requiere anestesióloga
+  if(/^(local|na|n\/a|ninguna|sin anestesia|topica|tópica)$/.test(a)) return false;   // explícitamente no la requiere
+  var d=String(r.descripcion||'').toLowerCase();
+  if(/revisi|valoraci|consulta|retoque|retiro de punto|puntos|curaci|spectra|breast boutique|control|seguimiento|virtual|depilaci|l[aá]ser|fibrosis|\bfz\b|pruc|botox|b[oó]tox|relleno|inyec|facial/.test(d)) return false; // no quirúrgico / estético
+  return true;   // procedimiento quirúrgico de Damián → Karen debe estar enterada
+}
 /* Casos que requieren anestesióloga (General/Sedación o línea Anestesia/VPA) — para Dra. Karen García.
-   Incluye tus citas + las cirugías de la Dra. Damián con sedación/general (si importaste su hoja). */
+   Incluye tus citas + las CIRUGÍAS de la Dra. Damián (aunque su hoja no diga "general/sedación"). */
 function filasAnestesia(){
   var mias=BOARD_ROWS.filter(function(r){ return /general|sedaci/i.test(r.anestesia||'') || r.linea==='Anestesia'; })
     .map(function(r){ return {horaIni:r.horaIni,horaFin:r.horaFin,paciente:r.paciente,linea:r.linea,
       descripcion:(r.descripcion||'')+(r.anestesia?(' · Anestesia: '+r.anestesia):''),area:r.area,operativo:r.operativo,estatus:r.estatus,externa:false}; });
-  var dam=DAMIAN_ROWS.filter(function(r){ return /general|sedaci/i.test(r.anestesia||''); })
+  var dam=DAMIAN_ROWS.filter(damRequiereAnestesia)
     .map(function(r){ return {horaIni:r.horaIni,horaFin:r.horaFin,paciente:r.paciente,linea:r.linea,
       descripcion:(r.descripcion||'')+(r.anestesia?(' · Anestesia: '+r.anestesia):''),area:'',operativo:r.operativo,estatus:r.estatus,externa:true}; });
   return mias.concat(dam).sort(function(a,b){ return String(a.horaIni||'').localeCompare(String(b.horaIni||'')); });
@@ -1205,7 +1216,7 @@ function reporteWhatsappAnestesia(){
   if(!rows.length){ boardMsg('No hay casos de anestesia en el día.','bad'); return; }
   var fecha=fmtFecha(document.getElementById('boardDate').value);
   var t='*Programación de Anestesia — '+fecha+'*\nDra. Karen García\n\n';
-  rows.forEach(function(r){ t+='• '+r.horaIni+(r.horaFin?('–'+r.horaFin):'')+' — '+r.paciente+' ('+(r.descripcion||r.linea)+')\n'; });
+  rows.forEach(function(r){ t+='• '+r.horaIni+(r.horaFin?('–'+r.horaFin):'')+' — '+(r.externa?'(Damián) ':'')+r.paciente+' ('+(r.descripcion||r.linea)+')\n'; });
   window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
 }
 
