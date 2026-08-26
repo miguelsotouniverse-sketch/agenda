@@ -22,6 +22,7 @@ function setupShim(){
     getDayEvents:      function(calId,date){ return {a:'daySchedule', p:{calIds:[calId], date:date}}; },
     getDayBoard:       function(date){ return {a:'dayBoard', p:{date:date}}; },
     setStatus:         function(calId,eventId,estatus){ return {a:'setStatus', p:{calId:calId, eventId:eventId, estatus:estatus}}; },
+    setOperativo:      function(calId,eventId,operativo){ return {a:'setOperativo', p:{calId:calId, eventId:eventId, operativo:operativo}}; },
     findCitas:         function(p){ return {a:'findCitas', p:p}; },
     cancelCita:        function(p){ return {a:'cancelCita', p:p}; },
     reschedule:        function(p){ return {a:'reschedule', p:p}; },
@@ -1036,7 +1037,7 @@ function renderBoard(){
         '<td><span class="lchip '+(lc[r.linea]||'')+'">'+esc(r.linea)+'</span></td>'+
         '<td>'+esc(r.descripcion||'—')+(r.autorizo?('<div class="sub" style="color:var(--warn);font-weight:600">⚠️ Empalme · autorizó: '+esc(r.autorizo)+'</div>'):(r.empalme?'<div class="sub" style="color:var(--warn);font-weight:600">⚠️ Empalme autorizado</div>':''))+'</td>'+
         '<td>'+esc(r.area||'—')+'</td>'+
-        '<td>'+esc(r.operativo||'—')+'</td>'+
+        '<td>'+operativoSelect(i,r.operativo||'')+'</td>'+
         '<td>'+statusSelect(i,r.estatus)+'</td>'+
         '<td>'+(r.telefono?('<button type="button" class="btn wa" onclick="waPatient('+i+')">WhatsApp</button>'):'<span class="sub">sin tel.</span>')+'</td>'+
         '<td class="nowrap"><button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px" title="Reagendar" onclick="boardReag('+i+')">↻</button> <button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px;color:#a33a32" title="Cancelar" onclick="boardCancel('+i+')">✕</button></td>'+
@@ -1062,6 +1063,29 @@ function onStatus(i,sel){
     if(!res||!res.ok){ alert('No se pudo guardar el estatus: '+((res&&res.error)||'?')); sel.value=old; sel.className='stsel st-'+old.replace(/\s/g,''); return; }
     r.estatus=nuevo; renderStats();
   }).withFailureHandler(function(err){ sel.disabled=false; sel.value=old; sel.className='stsel st-'+old.replace(/\s/g,''); alert('Error: '+((err&&err.message)||err)); }).setStatus(r.calId,r.eventId,nuevo);
+}
+/* Operativo editable: quién REALMENTE realizó el procedimiento (a veces cambia el día de la cita). */
+function operativoOpts(){
+  var base=(CAT.operativos||[]).concat(CAT.medicos||[]);
+  var seen={}, out=[]; base.forEach(function(o){ if(o&&!seen[o]){seen[o]=1;out.push(o);} });
+  return out;
+}
+function operativoSelect(i,val){
+  var opts=operativoOpts().slice();
+  if(val && opts.indexOf(val)===-1) opts.unshift(val);   // conserva el valor actual aunque no esté en el catálogo
+  var s='<select class="opsel" onchange="onOperativo('+i+',this)" style="max-width:160px;padding:4px 6px;border-radius:8px;border:1px solid #d9d5c8">';
+  if(!val) s+='<option value="" selected disabled hidden>Operativo…</option>';
+  opts.forEach(function(o){ s+='<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>'; });
+  return s+'</select>';
+}
+function onOperativo(i,sel){
+  var r=BOARD_ROWS[i], nuevo=sel.value, old=r.operativo||'';
+  sel.disabled=true;
+  google.script.run.withSuccessHandler(function(res){
+    sel.disabled=false;
+    if(!res||!res.ok){ alert('No se pudo guardar el operativo: '+((res&&res.error)||'?')); sel.value=old; return; }
+    r.operativo=nuevo;
+  }).withFailureHandler(function(err){ sel.disabled=false; sel.value=old; alert('Error: '+((err&&err.message)||err)); }).setOperativo(r.calId,r.eventId,nuevo);
 }
 function renderStats(){
   var rows=BOARD_ROWS.concat(DAMIAN_ROWS);
