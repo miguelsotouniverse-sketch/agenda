@@ -32,7 +32,8 @@ function setupShim(){
     getCotizaciones:   function(id,nombre){ return {a:'cotizaciones', p:{pacienteId:id, pacienteNombre:nombre}}; },
     getPronostico:     function(fecha){ return {a:'pronostico', p:{fecha:fecha}}; },
     getReportePeriodo: function(desde,hasta){ return {a:'reportePeriodo', p:{desde:desde, hasta:hasta}}; },
-    getCirugiasPendientes: function(desde,hasta){ return {a:'cirugiasPendientes', p:{desde:desde, hasta:hasta}}; }
+    getCirugiasPendientes: function(desde,hasta){ return {a:'cirugiasPendientes', p:{desde:desde, hasta:hasta}}; },
+    setGrupoWa: function(p){ return {a:'setGrupoWa', p:p}; }
   };
   window.google = window.google || {};
   window.google.script = window.google.script || {};
@@ -1838,22 +1839,27 @@ function cirPeriodoTxt(){ return CIR_DATA ? (fmtFecha(CIR_DATA.desde)+' – '+fm
 function renderCirugias(){
   var r=CIR_DATA, wrap=document.getElementById('cirWrap'), list=r.cirugias||[];
   function chip(l,n,k){ return '<div class="bstat bs-'+k+'"><div class="bn">'+n+'</div><div class="bl">'+esc(l)+'</div></div>'; }
-  var conVPO=0, conVPA=0;
-  list.forEach(function(c){ var eo=cirEtapaEstado(c.vpo), ea=cirEtapaEstado(c.vpa); if(eo.icon==='✅')conVPO++; if(ea.icon==='✅')conVPA++; });
+  var conVPO=0, conVPA=0, sinGrupo=0;
+  list.forEach(function(c){ var eo=cirEtapaEstado(c.vpo), ea=cirEtapaEstado(c.vpa); if(eo.icon==='✅')conVPO++; if(ea.icon==='✅')conVPA++; if(!c.grupoWa)sinGrupo++; });
   document.getElementById('cirStats').innerHTML=
-    chip('Cirugías',list.length,'t')+chip('Con VPO',conVPO,'c')+chip('Con VPA',conVPA,'p');
+    chip('Cirugías',list.length,'t')+chip('Con VPO',conVPO,'c')+chip('Con VPA',conVPA,'p')+chip('Grupos WA pendientes',sinGrupo,'r');
   if(!list.length){ wrap.innerHTML='<div class="empty">No hay cirugías en ese periodo.</div>'; document.getElementById('cirBtns').style.display='none'; return; }
   var h='<div style="font-weight:600;margin-bottom:6px">Checklist de cirugías · '+esc(cirPeriodoTxt())+'</div>';
-  h+='<table class="boardtable"><thead><tr><th>Fecha Cirugía</th><th>Paciente</th><th>Procedimiento</th><th>Anestesia</th><th>VPO</th><th>VPA</th><th>Estatus</th></tr></thead><tbody>';
-  list.forEach(function(c){
+  h+='<table class="boardtable"><thead><tr><th>Fecha Cirugía</th><th>Paciente</th><th>Procedimiento</th><th>Anticipo</th><th>VPO</th><th>VPA</th><th>Grupo WhatsApp</th><th>Estatus</th></tr></thead><tbody>';
+  list.forEach(function(c,i){
     var eo=cirEtapaEstado(c.vpo), ea=cirEtapaEstado(c.vpa);
-    h+='<tr>'+
+    var antTxt = c.anticipo ? esc(c.anticipo) : '<span style="color:#c0392b">— sin dato —</span>';
+    var grupo = c.grupoWa
+      ? '<button type="button" class="btn ghost" style="padding:3px 8px;color:#1a7a3a;border-color:#bfe3cb" onclick="marcarGrupo('+i+',false)">✅ Grupo creado</button>'
+      : '<button type="button" class="btn primary" style="padding:3px 8px" onclick="marcarGrupo('+i+',true)">⚠️ Marcar creado</button>';
+    h+='<tr'+(c.grupoWa?'':' style="background:#fff6f2"')+'>'+
       '<td class="nowrap"><b>'+esc(c.qxFecha)+'</b> '+esc(c.qxHora||'')+'</td>'+
       '<td><b>'+esc(c.paciente||'')+'</b></td>'+
       '<td>'+esc(c.procedimiento||'')+'</td>'+
-      '<td>'+esc(c.anestesia||'')+'</td>'+
+      '<td class="nowrap">'+antTxt+'</td>'+
       '<td class="nowrap" style="'+eo.cls+'">'+eo.icon+' '+esc(eo.txt)+'</td>'+
       '<td class="nowrap" style="'+ea.cls+'">'+ea.icon+' '+esc(ea.txt)+'</td>'+
+      '<td class="nowrap">'+grupo+(c.grupoWaInfo?('<div class="sub" style="color:#888;font-size:11px">'+esc(c.grupoWaInfo)+'</div>'):'')+'</td>'+
       '<td>'+esc(c.estatus||'')+'</td>'+
     '</tr>';
   });
@@ -1861,17 +1867,26 @@ function renderCirugias(){
   wrap.innerHTML=h;
   document.getElementById('cirBtns').style.display='flex';
 }
+function marcarGrupo(i, creado){
+  var c=(CIR_DATA&&CIR_DATA.cirugias)?CIR_DATA.cirugias[i]:null; if(!c) return;
+  cirMsg((creado?'Marcando':'Quitando')+' grupo de WhatsApp…','info');
+  google.script.run.withSuccessHandler(function(res){
+    if(res&&res.ok){ c.grupoWa=creado; if(!creado)c.grupoWaInfo=''; cirMsg('','info'); renderCirugias(); }
+    else { cirMsg('🚫 '+esc((res&&res.error)||'No se pudo actualizar'),'bad'); }
+  }).withFailureHandler(function(err){ cirMsg('🚫 '+esc((err&&err.message)||err),'bad'); }).setGrupoWa({calId:c.calId, eventId:c.eventId, creado:creado});
+}
 function cirRowsPlano(){
   return (CIR_DATA.cirugias||[]).map(function(c){
     var eo=cirEtapaEstado(c.vpo), ea=cirEtapaEstado(c.vpa);
     return { qx:(c.qxFecha||'')+' '+(c.qxHora||''), paciente:c.paciente||'', procedimiento:c.procedimiento||'',
-      anestesia:c.anestesia||'', vpo:eo.icon+' '+eo.txt, vpa:ea.icon+' '+ea.txt, estatus:c.estatus||'' };
+      anticipo:c.anticipo||'', vpo:eo.icon+' '+eo.txt, vpa:ea.icon+' '+ea.txt,
+      grupo:(c.grupoWa?'Sí':'PENDIENTE'), estatus:c.estatus||'' };
   });
 }
 function cirugiasPDF(){
   if(!CIR_DATA||!(CIR_DATA.cirugias||[]).length){ cirMsg('Primero genera el checklist.','bad'); return; }
-  var head=['Fecha Cirugía','Paciente','Procedimiento','Anestesia','VPO','VPA','Estatus'];
-  var body=cirRowsPlano().map(function(c){ return [c.qx, limpiaPDF(c.paciente), limpiaPDF(c.procedimiento), limpiaPDF(c.anestesia), limpiaPDF(c.vpo), limpiaPDF(c.vpa), limpiaPDF(c.estatus)]; });
+  var head=['Fecha Cirugía','Paciente','Procedimiento','Anticipo','VPO','VPA','Grupo WhatsApp','Estatus'];
+  var body=cirRowsPlano().map(function(c){ return [c.qx, limpiaPDF(c.paciente), limpiaPDF(c.procedimiento), limpiaPDF(c.anticipo), limpiaPDF(c.vpo), limpiaPDF(c.vpa), c.grupo, limpiaPDF(c.estatus)]; });
   descargarPDF('Cirugías pendientes — checklist', 'Dr. Miguel Soto   |   '+cirPeriodoTxt()+'   |   Total: '+(CIR_DATA.cirugias||[]).length, head, body, 'Cirugias_pendientes_'+(CIR_DATA.desde||'')+'_a_'+(CIR_DATA.hasta||'')+'.pdf');
 }
 function cirugiasExcel(){
@@ -1885,12 +1900,13 @@ function cirugiasExcel(){
   '<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>'+
   '<x:Name>Cirugias</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>'+
   '<body><table cellspacing="0" cellpadding="0" style="border-collapse:collapse">'+
-  '<tr><td colspan="7" style="font-size:15pt;font-weight:bold;font-family:Calibri,Arial;padding:6px 8px;color:#111111">Cirugías pendientes — checklist</td></tr>'+
-  '<tr><td colspan="7" style="font-family:Calibri,Arial;padding:0 8px 10px;color:#555555">Dr. Miguel Soto&#160;&#160;|&#160;&#160;'+eX(cirPeriodoTxt())+'&#160;&#160;|&#160;&#160;Total: '+(CIR_DATA.cirugias||[]).length+'</td></tr>'+
-  '<tr><td style="'+th+'">Fecha Cirugía</td><td style="'+th+'">Paciente</td><td style="'+th+'">Procedimiento</td><td style="'+th+'">Anestesia</td><td style="'+th+'">VPO</td><td style="'+th+'">VPA</td><td style="'+th+'">Estatus</td></tr>';
+  '<tr><td colspan="8" style="font-size:15pt;font-weight:bold;font-family:Calibri,Arial;padding:6px 8px;color:#111111">Cirugías pendientes — checklist</td></tr>'+
+  '<tr><td colspan="8" style="font-family:Calibri,Arial;padding:0 8px 10px;color:#555555">Dr. Miguel Soto&#160;&#160;|&#160;&#160;'+eX(cirPeriodoTxt())+'&#160;&#160;|&#160;&#160;Total: '+(CIR_DATA.cirugias||[]).length+'</td></tr>'+
+  '<tr><td style="'+th+'">Fecha Cirugía</td><td style="'+th+'">Paciente</td><td style="'+th+'">Procedimiento</td><td style="'+th+'">Anticipo</td><td style="'+th+'">VPO</td><td style="'+th+'">VPA</td><td style="'+th+'">Grupo WhatsApp</td><td style="'+th+'">Estatus</td></tr>';
   cirRowsPlano().forEach(function(c,i){
     var zebra=(i%2)?'background:#f7f6f2;':'';
-    html+='<tr><td style="'+td+zebra+'white-space:nowrap;font-weight:bold">'+eX(c.qx)+'</td><td style="'+td+zebra+'font-weight:bold">'+eX(c.paciente)+'</td><td style="'+td+zebra+'">'+eX(c.procedimiento)+'</td><td style="'+td+zebra+'">'+eX(c.anestesia)+'</td><td style="'+td+zebra+'">'+eX(c.vpo)+'</td><td style="'+td+zebra+'">'+eX(c.vpa)+'</td><td style="'+td+zebra+'">'+eX(c.estatus)+'</td></tr>';
+    var gcell=(c.grupo==='Sí')?'background:#e6f4ea;':'background:#fce8e6;';
+    html+='<tr><td style="'+td+zebra+'white-space:nowrap;font-weight:bold">'+eX(c.qx)+'</td><td style="'+td+zebra+'font-weight:bold">'+eX(c.paciente)+'</td><td style="'+td+zebra+'">'+eX(c.procedimiento)+'</td><td style="'+td+zebra+'">'+eX(c.anticipo)+'</td><td style="'+td+zebra+'">'+eX(c.vpo)+'</td><td style="'+td+zebra+'">'+eX(c.vpa)+'</td><td style="'+td+gcell+'font-weight:bold">'+eX(c.grupo)+'</td><td style="'+td+zebra+'">'+eX(c.estatus)+'</td></tr>';
   });
   html+='</table></body></html>';
   var blob=new Blob(['﻿'+html],{type:'application/vnd.ms-excel;charset=utf-8;'});
@@ -1907,8 +1923,8 @@ function cirugiasCSV(){
   lines.push(['Periodo', cirPeriodoTxt()].map(cell).join(','));
   lines.push(['Total', (CIR_DATA.cirugias||[]).length].map(cell).join(','));
   lines.push('');
-  lines.push(['Fecha Cirugía','Paciente','Procedimiento','Anestesia','VPO','VPA','Estatus'].map(cell).join(','));
-  cirRowsPlano().forEach(function(c){ lines.push([c.qx,c.paciente,c.procedimiento,c.anestesia,c.vpo,c.vpa,c.estatus].map(cell).join(',')); });
+  lines.push(['Fecha Cirugía','Paciente','Procedimiento','Anticipo','VPO','VPA','Grupo WhatsApp','Estatus'].map(cell).join(','));
+  cirRowsPlano().forEach(function(c){ lines.push([c.qx,c.paciente,c.procedimiento,c.anticipo,c.vpo,c.vpa,c.grupo,c.estatus].map(cell).join(',')); });
   var blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'});
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a'); a.href=url; a.download='Cirugias_pendientes_'+(CIR_DATA.desde||'')+'_a_'+(CIR_DATA.hasta||'')+'.csv';
