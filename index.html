@@ -1087,6 +1087,25 @@ function onOperativo(i,sel){
     r.operativo=nuevo;
   }).withFailureHandler(function(err){ sel.disabled=false; sel.value=old; alert('Error: '+((err&&err.message)||err)); }).setOperativo(r.calId,r.eventId,nuevo);
 }
+/* Mismo control de Operativo editable, pero para la vista de Asistencia del día (ASIST_ROWS). */
+function asistOperativoSelect(i,val){
+  var opts=operativoOpts().slice();
+  if(val && opts.indexOf(val)===-1) opts.unshift(val);
+  var s='<select class="opsel" onchange="onAsistOperativo('+i+',this)" style="max-width:160px;padding:4px 6px;border-radius:8px;border:1px solid #d9d5c8">';
+  if(!val) s+='<option value="" selected disabled hidden>Operativo…</option>';
+  opts.forEach(function(o){ s+='<option'+(o===val?' selected':'')+'>'+esc(o)+'</option>'; });
+  return s+'</select>';
+}
+function onAsistOperativo(i,sel){
+  var r=ASIST_ROWS[i], nuevo=sel.value, old=r.operativo||'';
+  if(!r.calId||!r.eventId){ alert('Esta cita no se puede editar aquí.'); sel.value=old; return; }
+  sel.disabled=true;
+  google.script.run.withSuccessHandler(function(res){
+    sel.disabled=false;
+    if(!res||!res.ok){ alert('No se pudo guardar el operativo: '+((res&&res.error)||'?')); sel.value=old; return; }
+    r.operativo=nuevo;
+  }).withFailureHandler(function(err){ sel.disabled=false; sel.value=old; alert('Error: '+((err&&err.message)||err)); }).setOperativo(r.calId,r.eventId,nuevo);
+}
 function renderStats(){
   var rows=BOARD_ROWS.concat(DAMIAN_ROWS);
   var c={Pendiente:0,Confirmada:0,'No Contesta':0,Cancelada:0,Reagendada:0};
@@ -1343,7 +1362,7 @@ function renderAsistencia(){
       '<td><span class="lchip">'+esc(r.linea)+'</span></td>'+
       '<td>'+esc(r.descripcion||'—')+'</td>'+
       '<td>'+esc(r.titular||'—')+'</td>'+
-      '<td>'+esc(r.operativo||'—')+'</td>'+
+      '<td>'+(r.externa?esc(r.operativo||'—'):asistOperativoSelect(i,r.operativo||''))+'</td>'+
       '<td>'+esc(r.prospecta||'—')+'</td>'+
       '<td>'+esc(r.cierra||'—')+'</td>'+
       '<td style="text-align:center"><input type="checkbox" id="achk_'+i+'" '+(r.asistio?'checked':'')+' onchange="onAsist('+i+')" style="width:20px;height:20px;cursor:pointer"></td>'+
