@@ -34,7 +34,8 @@ function setupShim(){
     getPronostico:     function(fecha){ return {a:'pronostico', p:{fecha:fecha}}; },
     getReportePeriodo: function(desde,hasta){ return {a:'reportePeriodo', p:{desde:desde, hasta:hasta}}; },
     getCirugiasPendientes: function(desde,hasta){ return {a:'cirugiasPendientes', p:{desde:desde, hasta:hasta}}; },
-    setGrupoWa: function(p){ return {a:'setGrupoWa', p:p}; }
+    setGrupoWa: function(p){ return {a:'setGrupoWa', p:p}; },
+    marcarReqEnviado: function(calId,eventId){ return {a:'marcarReqEnviado', p:{calId:calId, eventId:eventId}}; }
   };
   window.google = window.google || {};
   window.google.script = window.google.script || {};
@@ -1054,7 +1055,7 @@ function renderBoard(){
         '<td>'+esc(r.area||'—')+'</td>'+
         '<td>'+operativoSelect(i,r.operativo||'')+'</td>'+
         '<td>'+statusSelect(i,r.estatus)+'</td>'+
-        '<td>'+(r.telefono?('<button type="button" class="btn wa" onclick="waPatient('+i+')">WhatsApp</button>'):'<span class="sub">sin tel.</span>')+'</td>'+
+        '<td>'+(r.telefono?('<button type="button" class="btn wa" onclick="waPatient('+i+')">WhatsApp</button>'):'<span class="sub">sin tel.</span>')+reqBtn(i,r)+'</td>'+
         '<td class="nowrap"><button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px" title="Reagendar" onclick="boardReag('+i+')">↻</button> <button type="button" class="btn ghost" style="padding:4px 8px;font-size:11px;color:#a33a32" title="Cancelar" onclick="boardCancel('+i+')">✕</button></td>'+
       '</tr>';
     }
@@ -1072,6 +1073,9 @@ function statusSelect(i,val){
 }
 function onStatus(i,sel){
   var r=BOARD_ROWS[i], nuevo=sel.value, old=r.estatus;
+  // Primera vez presencial + se confirma -> abrir WhatsApp con los requisitos de ingreso (una sola vez).
+  // Se dispara aquí, dentro del gesto del usuario, para que el navegador no bloquee la ventana.
+  if(nuevo==='Confirmada' && !r.reqEnviado && r.telefono && esPrimeraVezPresencial(r)){ dispararRequisitos(i,true); }
   sel.disabled=true; sel.className='stsel st-'+nuevo.replace(/\s/g,'');
   google.script.run.withSuccessHandler(function(res){
     sel.disabled=false;
@@ -1152,6 +1156,46 @@ function waMsg(r){
 function waPatient(i){
   var r=BOARD_ROWS[i];
   window.open('https://wa.me/'+waTel(r.telefono)+'?text='+encodeURIComponent(waMsg(r)),'_blank');
+}
+
+/* ---- Recordatorio de requisitos de ingreso: SOLO consulta de PRIMERA VEZ PRESENCIAL ----
+   (Virtual prepaga el total y subsecuentes no aplican, por eso se excluyen.) */
+function esPrimeraVezPresencial(r){
+  if(!r || r.tipoMsg!=='consulta') return false;
+  if(!/presencial/i.test(r.modalidad||'')) return false;          // virtual = excluida
+  return /valoraci|primera vez|primera cita/i.test(r.motivo||''); // sin marca de valoración = no se asume primera vez
+}
+function horaBonita(hhmm){
+  var m=String(hhmm||'').match(/^(\d{1,2}):(\d{2})/); if(!m) return hhmm||'';
+  var h=+m[1], ap=h<12?'a.m.':'p.m.', h12=h%12; if(h12===0)h12=12;
+  return h12+':'+m[2]+' '+ap;
+}
+function waMsgRequisitos(r){
+  var nombre=((r.paciente||'').trim().split(' ')[0])||(r.paciente||'');
+  var fecha=fmtFecha(document.getElementById('boardDate').value);
+  var hora=horaBonita(r.horaIni);
+  return 'Hola '+nombre+', le recordamos su cita de valoración con el Dr. Miguel Soto mañana '+fecha+' a las '+hora+'. '+
+    'Para agilizar su ingreso, dos puntos: 1) presente una identificación oficial (INE o pasaporte), y '+
+    '2) antes de pasar al consultorio se cubren los $1,200 restantes de su consulta (su reserva de $300 ya está abonada). '+
+    'La esperamos en Miramontes 2342, Coyoacán. Si necesita reprogramar, responda a este mensaje.';
+}
+/* Botón de requisitos en la columna WhatsApp (solo aparece en primera vez presencial). */
+function reqBtn(i,r){
+  if(!esPrimeraVezPresencial(r)) return '';
+  if(!r.telefono) return '<div class="sub" style="color:#9a7b3c;margin-top:4px">1ª vez · sin tel.</div>';
+  if(r.reqEnviado) return '<div style="margin-top:4px"><button type="button" class="btn ghost" style="padding:3px 7px;font-size:11px" title="Reenviar requisitos de ingreso" onclick="dispararRequisitos('+i+',false)">✅ Requisitos enviados</button></div>';
+  return '<div style="margin-top:4px"><button type="button" class="btn wa" style="padding:3px 7px;font-size:11px" title="Enviar requisitos de ingreso (identificación + $1,200 restantes)" onclick="dispararRequisitos('+i+',false)">📲 Requisitos</button></div>';
+}
+/* Abre WhatsApp en esta computadora con el mensaje ya escrito y marca la cita para no repetirlo. */
+function dispararRequisitos(i,auto){
+  var r=BOARD_ROWS[i];
+  if(!r.telefono){ if(!auto) alert('Esta cita no tiene teléfono registrado.'); return; }
+  window.open('https://wa.me/'+waTel(r.telefono)+'?text='+encodeURIComponent(waMsgRequisitos(r)),'_blank');
+  if(!r.reqEnviado){
+    google.script.run.withSuccessHandler(function(res){
+      if(res&&res.ok){ r.reqEnviado=true; var wrap=document.getElementById('boardWrap'); if(wrap&&wrap.querySelector('table')) renderBoard(); }
+    }).withFailureHandler(function(){}).marcarReqEnviado(r.calId,r.eventId);
+  }
 }
 
 /* ---- Reportes del día ---- */
