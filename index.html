@@ -348,7 +348,7 @@ function initGsi(){
         <button type="button" class="btn ghost" onclick="reporteCSV()">📊 Descargar para Google Sheets</button>
         <button type="button" class="btn ghost" onclick="reporteWhatsapp()">📲 WhatsApp programación</button>
         <button type="button" class="btn ghost" onclick="reporteEmail()">✉️ Correo</button>
-        <button type="button" class="btn ghost" onclick="reportePDFAnestesia()">🩺 PDF Anestesia (<span id="lblAnest">Dr. Fernando Islas</span>)</button>
+        <button type="button" class="btn ghost" onclick="reportePDFAnestesia()">🩺 PDF Anestesia (Dra. Karen)</button>
         <button type="button" class="btn ghost" onclick="reporteWhatsappAnestesia()">📲 WhatsApp Anestesia</button>
       </div>
       <div id="boardReport"></div>
@@ -479,8 +479,6 @@ function initGsi(){
 </div>
 <script>
 /* ===== estado / catálogos (llegan del backend) ===== */
-/* Anestesiólogo de casa: hace TODAS las VPA y las anestesias. Se asigna solo, no se captura. */
-var ANESTESIOLOGO_CASA = "Dr. Fernando Islas";
 var CAT={}, CALLBL={}, current="consulta", selectedPatient=null, searchTimer=null;
 var EDIT_CTX=null;   // cuando se está editando una cita existente: {calId, eventId}
 var cotizaciones=[], selectedCotizacion=null;   // cotizaciones aceptadas del paciente (cirugía)
@@ -506,15 +504,16 @@ window.startApp = startApp;
 var TYPES={};
 function buildTypes(){
   var MEDICOS=CAT.medicos, OPERATIVOS=(CAT.operativos||CAT.medicos), CAPTURISTAS=CAT.capturistas, ANEST=CAT.anestesia;
-  // Operativos de TRATAMIENTO (consulta/inyectables/energy/cirujano): sin anestesiólogos (ellos sólo hacen anestesia/VPA)
-  var OPERATIVOS_TRAT=OPERATIVOS.filter(function(o){return !/karen|islas/i.test(o);});
+  // Operativos de TRATAMIENTO (consulta/inyectables/energy/cirujano): sin Karen (ella es solo anestesia/VPA)
+  var OPERATIVOS_TRAT=OPERATIVOS.filter(function(o){return !/karen/i.test(o);});
   var SINO=["Sí","No aplica"], TIPO_PX=["Primera vez","Subsecuente"], MODAL=["Presencial","Virtual"];
   var COMMON=[
     {k:"tipo_px",l:"Tipo de paciente",t:"select",opt:TIPO_PX,req:true},
     {k:"nombre",l:"Nombre del paciente",t:"text",req:true,fromPatient:true},
     {k:"telefono",l:"Teléfono",t:"text",req:true,fromPatient:true},
     {k:"medico",l:"Operativo",t:"select",opt:OPERATIVOS_TRAT,req:true},
-    {k:"modalidad",l:"Modalidad",t:"select",opt:MODAL,req:true}
+    {k:"modalidad",l:"Modalidad",t:"select",opt:MODAL,req:true},
+    {k:"sede",l:"Sede",t:"select",opt:["Renasté","Zorvix"],req:true}
   ];
   var SCHEDULE=[
     {k:"fecha",l:"Fecha",t:"date",req:true},
@@ -579,14 +578,13 @@ function buildTypes(){
       common:COMMON, motivo:[{k:"motivo",l:"Motivo de visita",t:"text",req:true,val:"Tratamiento Energy Devices"}],
       specific:[
         {k:"tratamiento",l:"Tratamiento programado",t:"select",opt:((CAT.procedimientosED&&CAT.procedimientosED.length)?CAT.procedimientosED:CAT.procEnergy),req:true},
-        {k:"anestesia",l:"Anestesia",t:"select",opt:ANEST,req:true},
-        {k:"sede",l:"Sede (si hay sedación)",t:"select",opt:["Renasté","Zorvix"]}
+        {k:"anestesia",l:"Anestesia",t:"select",opt:ANEST,req:true}
       ], schedule:SCHEDULE, tail:TAIL},
     cirugia:{label:"Cirugía",icon:"🔪",hint:"Genera 3 eventos vinculados: VPO (cabina) → VPA → Qx (cirugías).",surgery:true,
       common:COMMON_PRESENCIAL, motivo:[{k:"cirugia",l:"Cirugía programada",t:"cotizacion",req:true}],
       specific:[
         {k:"anestesia",l:"Anestesia",t:"select",opt:["General","Sedación","Local"],req:true},
-        {k:"sede",l:"Sede",t:"select",opt:["Renasté","Zorvix"],req:true},
+        {k:"vpa_operativo",l:"Operativo VPA (anestesióloga)",t:"select",opt:OPERATIVOS,val:"Dra. Karen García"},
         {k:"cabina_vpo",l:"Cabina VPO (opcional)",t:"select",opt:["Cabina 1","Cabina 2"]},
         {k:"vpo_fecha",l:"Fecha VPO (opcional)",t:"date"},{k:"vpo_hora",l:"Hora VPO (opcional)",t:"time"},
         {k:"vpa_fecha",l:"Fecha VPA (opcional)",t:"date"},{k:"vpa_hora",l:"Hora VPA (opcional)",t:"time"},
@@ -706,17 +704,7 @@ function renderForm(){
       if(imot){ imot.addEventListener("change",updIny); }
       updIny();
     }
-    // Sede dinámica: solo se pide cuando la anestesia es Sedación/General (procedimientos sedados).
-    var anesF=document.getElementById("fld_anestesia");
-    var sedeWrap=formEl.querySelector('.f[data-for="sede"]');
-    if(anesF && sedeWrap){
-      var updSede=function(){
-        var sed=/sedaci|general/i.test(anesF.value||'');
-        sedeWrap.style.display=sed?'':'none';
-        if(!sed){ var ss=document.getElementById('fld_sede'); if(ss) ss.value=''; }
-      };
-      anesF.addEventListener("change",updSede); updSede();
-    }
+    // La Sede ahora es SIEMPRE obligatoria (cirugías y consultas en Renasté/Zorvix): ya no se oculta.
     var fch=document.getElementById("fld_fecha"); if(fch) fch.addEventListener("change",loadBooked);
     var cb=document.getElementById("fld_cabina"); if(cb) cb.addEventListener("change",function(){updateRoute();loadBooked();});
   } else {
@@ -816,7 +804,7 @@ function buildClientEvents(f){
   var sum='👤 Paciente: '+titleCase(p.nombre)+' 📱 Teléfono: '+p.telefono+' 🧑🏻‍⚕️ Médico Tratante: '+(f.medico||"—");
   if(t.surgery){
     var cirTxt = selectedCotizacion ? (((selectedCotizacion.procedimientos||[]).join(' + ')||('Cotización '+selectedCotizacion.folio))+' ['+selectedCotizacion.folio+']') : (f.cirugia||'—');
-    var cirujano=f.medico||'—', anest=ANESTESIOLOGO_CASA;   // la VPA siempre la hace el anestesiólogo de casa
+    var cirujano=f.medico||'—', anest=f.vpa_operativo||'Dra. Karen García';
     var hasVPO=!!(f.vpo_fecha&&f.vpo_hora), hasVPA=!!(f.vpa_fecha&&f.vpa_hora);
     var d=function(et,op){return [L('🩺 Motivo de visita',et),L('⚪️ Cirugía Programada',cirTxt),L('😴 Anestesia',f.anestesia),L('🏢 Sede',f.sede),
       L('🏥 Médico Titular','Dr. Miguel Soto'),L('👤 Operativo',op),
@@ -838,10 +826,11 @@ function buildClientEvents(f){
     if(f.modalidad!=="Presencial") extra.push(L('📸 Fotos',f.fotos||'NA'));   // fotos solo en virtual
   }
   if(current==="inyectables") extra=[L('🏠 Cabina',f.cabina),L('⚪️ Procedimiento',f.procedimiento),L('😴 Anestesia',f.anestesia||'Local')];
-  if(current==="energy") extra=[L('⚪️ Tratamiento',f.tratamiento),L('😴 Anestesia',f.anestesia),L('🏢 Sede',f.sede)];
+  if(current==="energy") extra=[L('⚪️ Tratamiento',f.tratamiento),L('😴 Anestesia',f.anestesia)];
   var titularPrev=(current==="estetica")?(f.medico||'—'):'Dr. Miguel Soto';
   var desc=['🔄 Tipo de paciente: '+(f.tipo_px||'—'),'🩺 Motivo de visita: '+(f.motivo||'—')].concat(extra.filter(Boolean)).concat([
     '🏥 Médico Titular: '+titularPrev,'👤 Operativo: '+(f.medico||'—'),
+    '🏢 Sede: '+(f.sede||'—'),
     '🔘 Modalidad: '+(f.modalidad||'—'),(money(f.costo)?('💵 Costo: '+money(f.costo)):null),(f.msi?('💳 MSI: '+f.msi):null),
     '❗️ Observaciones: '+(f.observaciones||'—'),((f.prospecta&&f.prospecta!=='NA')?('☑️ Prospecta: '+f.prospecta):null),((f.cierra&&f.cierra!=='NA')?('☑️ Cierra: '+f.cierra):null),'☑️ Agenda: '+(CURRENT_AGENDA||'—')].filter(Boolean)).join('\n')+fichaClient(p);
   return [{cal:TYPES[current].cal(f),sum:sum,when:(f.fecha||'?')+' '+(f.hora||'?')+' ('+(f.duracion||'?')+' min)',desc:desc}];
@@ -867,8 +856,6 @@ function doSave(override){
     if((f.vpa_fecha&&!f.vpa_hora)||(!f.vpa_fecha&&f.vpa_hora)) missing.push({k:(f.vpa_fecha?"vpa_hora":"vpa_fecha"),l:"VPA: completa fecha y hora, o deja ambas vacías para omitirla"});
     if(f.vpo_fecha&&f.vpo_hora&&!f.cabina_vpo) missing.push({k:"cabina_vpo",l:"Cabina VPO (requerida si agendas VPO)"});
   }
-  // Sede: obligatoria en procedimientos con sedación/general (fuera de cirugía, que ya la pide siempre).
-  if(current!=="cirugia" && /sedaci|general/i.test(f.anestesia||'') && !f.sede) missing.push({k:"sede",l:"Sede (obligatoria cuando hay sedación/general)"});
   markInvalid(missing);
   // preview siempre
   var evs=buildClientEvents(f);
@@ -1147,7 +1134,7 @@ function waMsg(r){
   if(r.tipoMsg==='consulta')
     return base+'Le confirmamos su *consulta* para el *'+fecha+'* a las *'+hora+' hrs*.'+cierre;
   if(r.tipoMsg==='anestesia')
-    return base+'Le recordamos su *valoración preanestésica (VPA)* con el '+ANESTESIOLOGO_CASA+' el *'+fecha+'* a las *'+hora+' hrs*, previa a su cirugía.\nLleve por favor sus estudios de laboratorio recientes.'+cierre;
+    return base+'Le recordamos su *valoración preanestésica (VPA)* con la Dra. Karen García el *'+fecha+'* a las *'+hora+' hrs*, previa a su cirugía.\nLleve por favor sus estudios de laboratorio recientes.'+cierre;
   if(r.tipoMsg==='cirugia')
     return base+'Le confirmamos su *cirugía*'+(proc?(' ('+proc+')'):'')+' el *'+fecha+'* a las *'+hora+' hrs*.\n\n📋 *Indicaciones importantes:*\n• Ayuno estricto de 8 horas.\n• Retire esmalte de uñas, joyería y maquillaje.\n• Acuda con ropa cómoda y un acompañante.\n• No olvide completar su VPO y su valoración preanestésica (VPA).'+cierre;
   if(r.tipoMsg==='energy')
@@ -1323,7 +1310,7 @@ function reporteCSV(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
 }
-/* ¿Una cita de la Dra. Damián requiere que el anestesiólogo de casa esté enterado?
+/* ¿Una cita de la Dra. Damián requiere que la Dra. Karen (anestesióloga) esté enterada?
    Sí para cirugías/sedaciones; NO para lo que claramente no lleva anestesióloga
    (revisiones, valoraciones, consultas, retoques, retiro de puntos, curaciones, láser/spectra, etc.). */
 function damRequiereAnestesia(r){
@@ -1332,9 +1319,9 @@ function damRequiereAnestesia(r){
   if(/^(local|na|n\/a|ninguna|sin anestesia|topica|tópica)$/.test(a)) return false;   // explícitamente no la requiere
   var d=String(r.descripcion||'').toLowerCase();
   if(/revisi|valoraci|consulta|dudas|aclaraci|pl[aá]tica|informativ|orientaci|presupuesto|cotizaci|retoque|retiro de punto|puntos|curaci|spectra|breast boutique|control|seguimiento|virtual|depilaci|l[aá]ser|fibrosis|\bfz\b|pruc|botox|b[oó]tox|relleno|inyec|facial/.test(d)) return false; // no quirúrgico / estético (consultas, revisiones, dudas, etc.)
-  return true;   // procedimiento quirúrgico de Damián → el anestesiólogo debe estar enterado
+  return true;   // procedimiento quirúrgico de Damián → Karen debe estar enterada
 }
-/* Casos que requieren anestesiólogo (General/Sedación o línea Anestesia/VPA) — para el anestesiólogo de casa.
+/* Casos que requieren anestesióloga (General/Sedación o línea Anestesia/VPA) — para Dra. Karen García.
    Incluye tus citas + las CIRUGÍAS de la Dra. Damián (aunque su hoja no diga "general/sedación"). */
 function filasAnestesia(){
   var mias=BOARD_ROWS.filter(function(r){ return /general|sedaci/i.test(r.anestesia||'') || r.linea==='Anestesia'; })
@@ -1348,13 +1335,13 @@ function filasAnestesia(){
 function reportePDFAnestesia(){
   var rows=filasAnestesia();
   if(!rows.length){ boardMsg('No hay casos con anestesia General/Sedación en el día cargado.','bad'); return; }
-  abrirPDF(rows,'Programación de Anestesia',ANESTESIOLOGO_CASA+' · Anestesiólogo');
+  abrirPDF(rows,'Programación de Anestesia','Dra. Karen García · Anestesióloga');
 }
 function reporteWhatsappAnestesia(){
   var rows=filasAnestesia();
   if(!rows.length){ boardMsg('No hay casos de anestesia en el día.','bad'); return; }
   var fecha=fmtFecha(document.getElementById('boardDate').value);
-  var t='*Programación de Anestesia — '+fecha+'*\n'+ANESTESIOLOGO_CASA+'\n\n';
+  var t='*Programación de Anestesia — '+fecha+'*\nDra. Karen García\n\n';
   rows.forEach(function(r){ t+='• '+r.horaIni+(r.horaFin?('–'+r.horaFin):'')+' — '+(r.externa?'(Damián) ':'')+r.paciente+' ('+(r.descripcion||r.linea)+')\n'; });
   window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
 }
@@ -2050,7 +2037,6 @@ function cirugiasCSV(){
     <a data-app="agenda"    href="https://agenda.miguelsotomd.com">Agenda</a>
     <a data-app="cotizador" href="https://cotizador.miguelsotomd.com">Cotizador</a>
     <a data-app="cobros"    href="https://cobros.miguelsotomd.com">Cobros</a>
-    <a data-app="anestesia" href="https://anestesia.miguelsotomd.com">Anestesia</a>
   </div>
   <label for="ms-toggle" class="ms-trigger" aria-label="Cambiar de app"><span>MS</span></label>
 </div>
