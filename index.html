@@ -348,7 +348,7 @@ function initGsi(){
         <button type="button" class="btn ghost" onclick="reporteCSV()">📊 Descargar para Google Sheets</button>
         <button type="button" class="btn ghost" onclick="reporteWhatsapp()">📲 WhatsApp programación</button>
         <button type="button" class="btn ghost" onclick="reporteEmail()">✉️ Correo</button>
-        <button type="button" class="btn ghost" onclick="reportePDFAnestesia()">🩺 PDF Anestesia (Dra. Karen)</button>
+        <button type="button" class="btn ghost" onclick="reportePDFAnestesia()">🩺 PDF Anestesia (Dr. Fernando Islas)</button>
         <button type="button" class="btn ghost" onclick="reporteWhatsappAnestesia()">📲 WhatsApp Anestesia</button>
       </div>
       <div id="boardReport"></div>
@@ -504,8 +504,8 @@ window.startApp = startApp;
 var TYPES={};
 function buildTypes(){
   var MEDICOS=CAT.medicos, OPERATIVOS=(CAT.operativos||CAT.medicos), CAPTURISTAS=CAT.capturistas, ANEST=CAT.anestesia;
-  // Operativos de TRATAMIENTO (consulta/inyectables/energy/cirujano): sin Karen (ella es solo anestesia/VPA)
-  var OPERATIVOS_TRAT=OPERATIVOS.filter(function(o){return !/karen/i.test(o);});
+  // Operativos de TRATAMIENTO (consulta/inyectables/energy/cirujano): sin el anestesiólogo titular (él es solo anestesia/VPA)
+  var OPERATIVOS_TRAT=OPERATIVOS.filter(function(o){return !/karen|fernando\s+islas/i.test(o);});
   var SINO=["Sí","No aplica"], TIPO_PX=["Primera vez","Subsecuente"], MODAL=["Presencial","Virtual"];
   var COMMON=[
     {k:"tipo_px",l:"Tipo de paciente",t:"select",opt:TIPO_PX,req:true},
@@ -578,13 +578,14 @@ function buildTypes(){
       common:COMMON, motivo:[{k:"motivo",l:"Motivo de visita",t:"text",req:true,val:"Tratamiento Energy Devices"}],
       specific:[
         {k:"tratamiento",l:"Tratamiento programado",t:"select",opt:((CAT.procedimientosED&&CAT.procedimientosED.length)?CAT.procedimientosED:CAT.procEnergy),req:true},
-        {k:"anestesia",l:"Anestesia",t:"select",opt:ANEST,req:true}
+        {k:"anestesia",l:"Anestesia",t:"select",opt:ANEST,req:true},
+        {k:"vpa_operativo",l:"Anestesiólogo(a)",t:"select",opt:OPERATIVOS,val:"Dr. Fernando Islas"}
       ], schedule:SCHEDULE, tail:TAIL},
     cirugia:{label:"Cirugía",icon:"🔪",hint:"Genera 3 eventos vinculados: VPO (cabina) → VPA → Qx (cirugías).",surgery:true,
       common:COMMON_PRESENCIAL, motivo:[{k:"cirugia",l:"Cirugía programada",t:"cotizacion",req:true}],
       specific:[
         {k:"anestesia",l:"Anestesia",t:"select",opt:["General","Sedación","Local"],req:true},
-        {k:"vpa_operativo",l:"Operativo VPA (anestesióloga)",t:"select",opt:OPERATIVOS,val:"Dra. Karen García"},
+        {k:"vpa_operativo",l:"Anestesiólogo(a)",t:"select",opt:OPERATIVOS,val:"Dr. Fernando Islas"},
         {k:"cabina_vpo",l:"Cabina VPO (opcional)",t:"select",opt:["Cabina 1","Cabina 2"]},
         {k:"vpo_fecha",l:"Fecha VPO (opcional)",t:"date"},{k:"vpo_hora",l:"Hora VPO (opcional)",t:"time"},
         {k:"vpa_fecha",l:"Fecha VPA (opcional)",t:"date"},{k:"vpa_hora",l:"Hora VPA (opcional)",t:"time"},
@@ -786,6 +787,7 @@ function selectPatient(p){
     '<button type="button" id="changePat">Cambiar</button></div>';
   document.getElementById("changePat").onclick=clearPatient;
   renderForm(); clearPreview();
+  revisarFuturas(p,'banner');   // avisa si la paciente ya tiene citas futuras
 }
 function clearPatient(){ selectedPatient=null; selectedCotizacion=null; cotizaciones=[]; patSelectedEl.innerHTML=""; patNotFound.innerHTML=""; patSearch.value=""; renderForm(); clearPreview(); patSearch.focus(); }
 
@@ -804,9 +806,9 @@ function buildClientEvents(f){
   var sum='👤 Paciente: '+titleCase(p.nombre)+' 📱 Teléfono: '+p.telefono+' 🧑🏻‍⚕️ Médico Tratante: '+(f.medico||"—");
   if(t.surgery){
     var cirTxt = selectedCotizacion ? (((selectedCotizacion.procedimientos||[]).join(' + ')||('Cotización '+selectedCotizacion.folio))+' ['+selectedCotizacion.folio+']') : (f.cirugia||'—');
-    var cirujano=f.medico||'—', anest=f.vpa_operativo||'Dra. Karen García';
+    var cirujano=f.medico||'—', anest=f.vpa_operativo||'Dr. Fernando Islas';
     var hasVPO=!!(f.vpo_fecha&&f.vpo_hora), hasVPA=!!(f.vpa_fecha&&f.vpa_hora);
-    var d=function(et,op){return [L('🩺 Motivo de visita',et),L('⚪️ Cirugía Programada',cirTxt),L('😴 Anestesia',f.anestesia),L('🏢 Sede',f.sede),
+    var d=function(et,op){return [L('🩺 Motivo de visita',et),L('⚪️ Cirugía Programada',cirTxt),L('😴 Anestesia',f.anestesia),L('💊 Anestesiólogo',anest),L('🏢 Sede',f.sede),
       L('🏥 Médico Titular','Dr. Miguel Soto'),L('👤 Operativo',op),
       L('📆 Fecha VPO',hasVPO?(f.vpo_fecha+' '+f.vpo_hora):'Sin VPO (directo a cirugía)'),L('📆 Fecha VPA',hasVPA?(f.vpa_fecha+' '+f.vpa_hora):'Sin VPA (directo a cirugía)'),L('📆 Fecha Cirugía',f.qx_fecha+' '+f.qx_hora),
       L('🕞 Ingreso',f.ingreso||'PD'),L('💵 Costo',money(f.costo)),L('💰 Anticipo',money(f.anticipo)),L('☑️ Agenda',CURRENT_AGENDA)].filter(Boolean).join('\n');};
@@ -826,7 +828,7 @@ function buildClientEvents(f){
     if(f.modalidad!=="Presencial") extra.push(L('📸 Fotos',f.fotos||'NA'));   // fotos solo en virtual
   }
   if(current==="inyectables") extra=[L('🏠 Cabina',f.cabina),L('⚪️ Procedimiento',f.procedimiento),L('😴 Anestesia',f.anestesia||'Local')];
-  if(current==="energy") extra=[L('⚪️ Tratamiento',f.tratamiento),L('😴 Anestesia',f.anestesia)];
+  if(current==="energy") extra=[L('⚪️ Tratamiento',f.tratamiento),L('😴 Anestesia',f.anestesia),L('💊 Anestesiólogo',f.vpa_operativo)];
   var titularPrev=(current==="estetica")?(f.medico||'—'):'Dr. Miguel Soto';
   var desc=['🔄 Tipo de paciente: '+(f.tipo_px||'—'),'🩺 Motivo de visita: '+(f.motivo||'—')].concat(extra.filter(Boolean)).concat([
     '🏥 Médico Titular: '+titularPrev,'👤 Operativo: '+(f.medico||'—'),
@@ -856,6 +858,8 @@ function doSave(override){
     if((f.vpa_fecha&&!f.vpa_hora)||(!f.vpa_fecha&&f.vpa_hora)) missing.push({k:(f.vpa_fecha?"vpa_hora":"vpa_fecha"),l:"VPA: completa fecha y hora, o deja ambas vacías para omitirla"});
     if(f.vpo_fecha&&f.vpo_hora&&!f.cabina_vpo) missing.push({k:"cabina_vpo",l:"Cabina VPO (requerida si agendas VPO)"});
   }
+  // Anestesiólogo obligatorio cuando la anestesia es General/Sedación (cirugías y procedimientos con sedación).
+  if((current==="cirugia"||current==="energy") && /sedaci|general/i.test(f.anestesia||'') && !f.vpa_operativo) missing.push({k:"vpa_operativo",l:"Anestesiólogo(a) (obligatorio con sedación/general)"});
   markInvalid(missing);
   // preview siempre
   var evs=buildClientEvents(f);
@@ -881,6 +885,7 @@ function doSave(override){
         res.eventos.map(function(e){return '<li>'+esc(e.calendar)+' · '+esc(e.when)+(e.empalmado?' ⚠️ empalme':'')+'</li>';}).join("")+'</ul>'+
         (res.aviso?('<div style="margin-top:8px;color:var(--bad);font-weight:700">'+esc(res.aviso)+'</div>'):'')+
         '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn primary" onclick="nuevaCita()">➕ Agendar otra cita</button><button type="button" class="btn ghost" onclick="clearPreviewKeep()">Otra cita (mismo paciente)</button></div>';
+      if(!res.editada) revisarFuturas(selectedPatient,'modal');   // tras agendar, revisar citas futuras de la paciente
     } else if(res.faltantes){ statusEl.className="status bad"; statusEl.innerHTML='🚫 Faltan campos: '+res.faltantes.map(esc).join(", "); }
     else if(res.error==='SIN_ANTICIPO'){
       var a=res.anticipo||{};
@@ -1134,7 +1139,7 @@ function waMsg(r){
   if(r.tipoMsg==='consulta')
     return base+'Le confirmamos su *consulta* para el *'+fecha+'* a las *'+hora+' hrs*.'+cierre;
   if(r.tipoMsg==='anestesia')
-    return base+'Le recordamos su *valoración preanestésica (VPA)* con la Dra. Karen García el *'+fecha+'* a las *'+hora+' hrs*, previa a su cirugía.\nLleve por favor sus estudios de laboratorio recientes.'+cierre;
+    return base+'Le recordamos su *valoración preanestésica (VPA)* con el Dr. Fernando Islas el *'+fecha+'* a las *'+hora+' hrs*, previa a su cirugía.\nLleve por favor sus estudios de laboratorio recientes.'+cierre;
   if(r.tipoMsg==='cirugia')
     return base+'Le confirmamos su *cirugía*'+(proc?(' ('+proc+')'):'')+' el *'+fecha+'* a las *'+hora+' hrs*.\n\n📋 *Indicaciones importantes:*\n• Ayuno estricto de 8 horas.\n• Retire esmalte de uñas, joyería y maquillaje.\n• Acuda con ropa cómoda y un acompañante.\n• No olvide completar su VPO y su valoración preanestésica (VPA).'+cierre;
   if(r.tipoMsg==='energy')
@@ -1310,7 +1315,7 @@ function reporteCSV(){
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
 }
-/* ¿Una cita de la Dra. Damián requiere que la Dra. Karen (anestesióloga) esté enterada?
+/* ¿Una cita de la Dra. Damián requiere que el anestesiólogo titular (Dr. Fernando Islas) esté enterado?
    Sí para cirugías/sedaciones; NO para lo que claramente no lleva anestesióloga
    (revisiones, valoraciones, consultas, retoques, retiro de puntos, curaciones, láser/spectra, etc.). */
 function damRequiereAnestesia(r){
@@ -1319,9 +1324,9 @@ function damRequiereAnestesia(r){
   if(/^(local|na|n\/a|ninguna|sin anestesia|topica|tópica)$/.test(a)) return false;   // explícitamente no la requiere
   var d=String(r.descripcion||'').toLowerCase();
   if(/revisi|valoraci|consulta|dudas|aclaraci|pl[aá]tica|informativ|orientaci|presupuesto|cotizaci|retoque|retiro de punto|puntos|curaci|spectra|breast boutique|control|seguimiento|virtual|depilaci|l[aá]ser|fibrosis|\bfz\b|pruc|botox|b[oó]tox|relleno|inyec|facial/.test(d)) return false; // no quirúrgico / estético (consultas, revisiones, dudas, etc.)
-  return true;   // procedimiento quirúrgico de Damián → Karen debe estar enterada
+  return true;   // procedimiento quirúrgico de Damián → el anestesiólogo debe estar enterado
 }
-/* Casos que requieren anestesióloga (General/Sedación o línea Anestesia/VPA) — para Dra. Karen García.
+/* Casos que requieren anestesiólogo (General/Sedación o línea Anestesia/VPA) — para Dr. Fernando Islas.
    Incluye tus citas + las CIRUGÍAS de la Dra. Damián (aunque su hoja no diga "general/sedación"). */
 function filasAnestesia(){
   var mias=BOARD_ROWS.filter(function(r){ return /general|sedaci/i.test(r.anestesia||'') || r.linea==='Anestesia'; })
@@ -1335,13 +1340,13 @@ function filasAnestesia(){
 function reportePDFAnestesia(){
   var rows=filasAnestesia();
   if(!rows.length){ boardMsg('No hay casos con anestesia General/Sedación en el día cargado.','bad'); return; }
-  abrirPDF(rows,'Programación de Anestesia','Dra. Karen García · Anestesióloga');
+  abrirPDF(rows,'Programación de Anestesia','Dr. Fernando Islas · Anestesiólogo');
 }
 function reporteWhatsappAnestesia(){
   var rows=filasAnestesia();
   if(!rows.length){ boardMsg('No hay casos de anestesia en el día.','bad'); return; }
   var fecha=fmtFecha(document.getElementById('boardDate').value);
-  var t='*Programación de Anestesia — '+fecha+'*\nDra. Karen García\n\n';
+  var t='*Programación de Anestesia — '+fecha+'*\nDr. Fernando Islas\n\n';
   rows.forEach(function(r){ t+='• '+r.horaIni+(r.horaFin?('–'+r.horaFin):'')+' — '+(r.externa?'(Damián) ':'')+r.paciente+' ('+(r.descripcion||r.linea)+')\n'; });
   window.open('https://wa.me/?text='+encodeURIComponent(t),'_blank');
 }
@@ -1530,6 +1535,72 @@ function cancCita(i){
     if(!res||!res.ok){ citaMsg('🚫 '+esc((res&&res.error)||'Error'),'bad'); return; }
     citaMsg('✅ Cancelada'+(res.cancelados>1?(' ('+res.cancelados+' eventos)'):'')+'. El anticipo queda liberado.','ok'); loadCitas();
   }).withFailureHandler(function(err){ citaMsg('🚫 '+esc((err&&err.message)||err),'bad'); }).cancelCita({calId:c.calId,eventId:c.eventId,motivo:motivo});
+}
+/* ===== Revisión de CITAS FUTURAS del paciente (al seleccionar y al agendar) =====
+   Reutiliza findCitas con ventana amplia (hoy → +2 años) para detectar citas que pudieran
+   haber quedado "de más" (p. ej. una revisión a 6 meses desplazada por una cirugía más próxima)
+   y permite cancelarlas. No toca el backend: solo pasa desde/hasta al mismo endpoint. */
+var FUT_PAC=null, FUT_CITAS=[];
+function futYmd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function revisarFuturas(pac, mode){
+  if(!pac) return;
+  var hoy=new Date(); hoy.setHours(0,0,0,0);
+  var fin=new Date(hoy.getTime()+730*24*3600*1000);
+  google.script.run.withSuccessHandler(function(res){
+    if(!res||!res.ok) return;
+    if(selectedPatient!==pac) return;   // el usuario cambió de paciente mientras cargaba
+    var citas=(res.citas||[]).filter(function(c){ return !c.cancelada; });
+    var b=document.getElementById('futBanner'); if(b) b.remove();
+    if(!citas.length) return;
+    FUT_PAC=pac; FUT_CITAS=citas;
+    if(mode==='modal') abrirModalFuturas(); else mostrarBannerFuturas(citas.length);
+  }).withFailureHandler(function(){}).findCitas({pacienteId:pac.id, nombre:pac.nombre, telefono:pac.telefono, desde:futYmd(hoy), hasta:futYmd(fin)});
+}
+function mostrarBannerFuturas(n){
+  var old=document.getElementById('futBanner'); if(old) old.remove();
+  var div=document.createElement('div');
+  div.id='futBanner';
+  div.style.cssText='margin-top:8px;background:#fff7e6;border:1px solid #e9d8a6;border-radius:10px;padding:10px 12px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap';
+  div.innerHTML='<span>⚠️ Esta paciente ya tiene <b>'+n+'</b> cita(s) futura(s). Revisa si alguna ya no aplica.</span>'+
+    '<button type="button" class="btn ghost" onclick="abrirModalFuturas()">Revisar citas futuras</button>';
+  patSelectedEl.appendChild(div);
+}
+function abrirModalFuturas(){
+  cerrarModalFuturas();
+  var ov=document.createElement('div');
+  ov.id='futModal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:640px;width:100%;max-height:85vh;overflow:auto;padding:18px 20px;box-shadow:0 10px 40px rgba(0,0,0,.3)">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="margin:0;font-size:16px">⚠️ Citas futuras de '+esc(FUT_PAC?FUT_PAC.nombre:'')+'</h3>'+
+    '<button type="button" class="btn ghost" onclick="cerrarModalFuturas()">✕</button></div>'+
+    '<p style="color:var(--muted);font-size:13px;margin:6px 0 12px">Revisa si alguna de estas citas ya no aplica (p. ej. quedó desplazada por una nueva) y cancélala para no dejar citas de más.</p>'+
+    '<div id="futList"></div>'+
+    '<div style="margin-top:12px;text-align:right"><button type="button" class="btn primary" onclick="cerrarModalFuturas()">Listo</button></div></div>';
+  ov.onclick=function(ev){ if(ev.target===ov) cerrarModalFuturas(); };
+  document.body.appendChild(ov);
+  renderFuturasList();
+}
+function cerrarModalFuturas(){ var m=document.getElementById('futModal'); if(m) m.remove(); }
+function renderFuturasList(){
+  var box=document.getElementById('futList'); if(!box) return;
+  if(!FUT_CITAS.length){ box.innerHTML='<div class="empty">No quedan citas futuras pendientes. 👍</div>'; return; }
+  box.innerHTML=FUT_CITAS.map(function(c,i){
+    return '<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">'+
+      '<div><b>'+esc(fmtFecha(c.fecha))+'</b> · '+esc(c.hora)+' <span class="lchip">'+esc(c.linea)+'</span>'+
+      '<div style="color:var(--muted);font-size:12px;margin-top:3px">'+esc(c.descripcion||'—')+' · estatus: '+esc(c.estatus)+(c.etapa?(' · etapa '+esc(c.etapa)):'')+'</div></div>'+
+      '<button type="button" class="btn ghost" style="color:#a33a32;border-color:#e3bdb8;white-space:nowrap" onclick="cancelarFutura('+i+')">Cancelar cita</button>'+
+    '</div>';
+  }).join('');
+}
+function cancelarFutura(i){
+  var c=FUT_CITAS[i]; if(!c) return;
+  if(!confirm('¿Cancelar la cita del '+fmtFecha(c.fecha)+' '+c.hora+'?'+(c.etapa?'\n(Es parte de una cirugía: se cancelan las 3 etapas.)':''))) return;
+  var motivo=prompt('Motivo de la cancelación (opcional):','Cita de más / reemplazada por una cita más próxima')||'';
+  google.script.run.withSuccessHandler(function(res){
+    if(!res||!res.ok){ alert('🚫 '+((res&&res.error)||'No se pudo cancelar')); return; }
+    FUT_CITAS.splice(i,1); renderFuturasList();
+    var b=document.getElementById('futBanner'); if(b){ var bb=b.querySelector('b'); if(FUT_CITAS.length&&bb){ bb.textContent=FUT_CITAS.length; } else { b.remove(); } }
+  }).withFailureHandler(function(e){ alert('🚫 '+((e&&e.message)||e)); }).cancelCita({calId:c.calId,eventId:c.eventId,motivo:motivo});
 }
 function reagCita(i){
   var c=CITAS[i], box=document.getElementById('reag_'+i);
