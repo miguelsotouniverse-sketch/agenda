@@ -908,6 +908,22 @@ function doSave(override){
         doSave({ anticipoAutorizadoPor:auth, anticipoMotivo:document.getElementById("antMotivo").value.trim() });
       }; }
     }
+    else if(res.error==='DIA_CERRADO'){
+      var html='🚫 El Dr. Soto no da consulta los <b>'+esc(res.dia||'ese día')+'</b> (solo miércoles, jueves, sábado y domingo).'+
+        '<div class="ovr"><div class="ovrt">⚠️ ¿Autorizas agendar esta consulta en día cerrado (p. ej. retiro de puntos / post-op)? Indica quién lo autoriza:</div>'+
+        '<select id="diaAuth"><option value="" selected disabled hidden>Autoriza…</option>'+
+        (CAT.autorizadores||[]).map(function(x){return "<option>"+esc(x)+"</option>";}).join("")+'</select>'+
+        '<input id="diaMotivo" placeholder="Motivo (ej. retiro de puntos / post-op)">'+
+        '<button type="button" id="diaBtn">Agendar en día cerrado (autorizado)</button>'+
+        '<div class="ovrerr" id="diaErr"></div></div>';
+      statusEl.className="status bad"; statusEl.innerHTML=html;
+      var db=document.getElementById("diaBtn");
+      if(db){ db.onclick=function(){
+        var auth=document.getElementById("diaAuth").value;
+        if(!auth){ document.getElementById("diaErr").textContent="Selecciona quién autoriza."; return; }
+        doSave({ diaAutorizadoPor:auth, diaMotivo:document.getElementById("diaMotivo").value.trim() });
+      }; }
+    }
     else if(res.choques){
       var html='🚫 Choque de horario — no se guardó.<ul>'+res.choques.map(function(c){return '<li><b>'+esc(c.when)+'</b> en '+esc(c.calendar)+' choca con: '+c.hits.map(esc).join("; ")+'</li>';}).join("")+'</ul>';
       if(res.canOverride){
