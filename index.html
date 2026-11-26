@@ -63,7 +63,7 @@ setupShim();
 /* Mapa cuenta -> persona (debe coincidir con CONFIG.USERS del backend). Solo para mostrar el nombre. */
 var USERS_FRONT = {
   'miguelsotomd@gmail.com':'Dr. Miguel Soto','miguelsotoadmi@gmail.com':'Anahi Alvarado',
-  'sotoagenda@gmail.com':'Valeria Lima','renasteventas@gmail.com':'Susana Palacios',
+  'sotoagenda@gmail.com':'Anahi Alvarado','renasteventas@gmail.com':'Susana Palacios',
   'workspacemiguelsoto@gmail.com':'Claudia Falcón'
 };
 var CURRENT_EMAIL='', CURRENT_AGENDA='';
@@ -532,7 +532,7 @@ function buildTypes(){
     ? {k:"medico",l:"Operativo",t:"select",opt:["Dr. Miguel Soto"],val:"Dr. Miguel Soto",req:true}
     : x; });
   // Medicina Estética: la atienden las doctoras (operativo limitado)
-  var DOCTORAS_ESTETICA=['Dra. Laura Tagle','Dra. Samantha Contreras'];
+  var DOCTORAS_ESTETICA=['Dra. Nicole'];
   var COMMON_ESTETICA=COMMON.map(function(x){ return x.k==="medico"
     ? {k:"medico",l:"Operativo",t:"select",opt:DOCTORAS_ESTETICA,req:true}
     : x; });
@@ -553,7 +553,7 @@ function buildTypes(){
         {k:"residencia",l:"Lugar de residencia",t:"text",fromPatient:true},
         {k:"fotos",l:"Fotos",t:"select",opt:SINO}
       ], schedule:SCHEDULE, tail:TAIL_NO_MSI},
-    estetica:{label:"Consulta Medicina Estética",icon:"✨",hint:"Atienden Dra. Tagle / Dra. Contreras. Cabina 1 ó 2.",
+    estetica:{label:"Consulta Medicina Estética",icon:"✨",hint:"Atiende Dra. Nicole. Cabina 1 ó 2.",
       cal:function(f){return f.cabina==="Cabina 2"?CALLBL.cabina2:CALLBL.cabina1;}, dur:function(f){return /valoraci|primera vez/i.test(f.motivo||'')?60:30;},
       common:COMMON_ESTETICA,
       motivo:[{k:"motivo",l:"Motivo de visita",t:"select",opt:["Consulta de primera vez","Consulta subsecuente","Fibrosis Zero","PRUC"],req:true}],
@@ -1636,7 +1636,7 @@ function reagGuardar(i,override){
   google.script.run.withSuccessHandler(function(res){
     if(res&&res.ok){ citaMsg('✅ Reagendada a '+esc(res.when)+'.','ok'); loadCitas(); return; }
     if(res&&res.choques){
-      var a=prompt('⚠️ Choque de horario:\n'+res.choques[0].hits.join('\n')+'\n\n¿Quién autoriza el empalme? (nombre exacto: Dr. Miguel Soto, Dra. Laura Tagle o Claudia Falcón)');
+      var a=prompt('⚠️ Choque de horario:\n'+res.choques[0].hits.join('\n')+'\n\n¿Quién autoriza el empalme? (nombre exacto: Dr. Miguel Soto, Dra. Nicole o Claudia Falcón)');
       if(a){ reagGuardar.ovr=true; google.script.run.withSuccessHandler(function(r2){ if(r2&&r2.ok){ citaMsg('✅ Reagendada (empalme autorizado) a '+esc(r2.when)+'.','ok'); loadCitas(); } else citaMsg('🚫 '+esc((r2&&r2.error)||'Error'),'bad'); }).withFailureHandler(function(e){citaMsg('🚫 '+esc((e&&e.message)||e),'bad');}).reschedule({calId:c.calId,eventId:c.eventId,fecha:fecha,hora:hora,dur:dur,override:{autorizadoPor:a}}); }
       else citaMsg('🚫 Reagendado cancelado (choque sin autorizar).','bad');
       return;
