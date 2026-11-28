@@ -1377,7 +1377,7 @@ function importDamian(){
   google.script.run.withSuccessHandler(function(res){
     if(btn) btn.disabled=false;
     if(!res||!res.ok){ msg.innerHTML='<span style="color:#a33a32">'+esc((res&&res.error)||'No se pudo leer la hoja.')+'</span>'; return; }
-    DAMIAN_ROWS=(res.citas||[]).map(function(c){ return {horaIni:c.horaIni,horaFin:c.horaFin,paciente:c.paciente,descripcion:c.descripcion,anestesia:c.anestesia||'',operativo:c.operativo||'Dra. Damián',estatus:c.estatus||'—',linea:'Cirugía (Dra. Damián)',externa:true}; });
+    var __d=document.getElementById('boardDate').value; if(res.fecha && __d && res.fecha!==__d){ DAMIAN_ROWS=[]; try{document.getElementById('damianClear').style.display='none';}catch(e){} document.getElementById('damianMsg').innerHTML='<span style="color:#a33a32">⚠️ La hoja de la Dra. Damián es del '+esc(fmtFecha(res.fecha))+', no del '+esc(fmtFecha(__d))+'. Cambia la fecha del tablero y vuelve a importar.</span>'; renderBoard(); return; } DAMIAN_ROWS=(res.citas||[]).map(function(c){ return {horaIni:c.horaIni,horaFin:c.horaFin,paciente:c.paciente,descripcion:c.descripcion,anestesia:c.anestesia||'',operativo:c.operativo||'Dra. Damián',estatus:c.estatus||'—',linea:'Cirugía (Dra. Damián)',externa:true}; });
     document.getElementById('damianClear').style.display='';
     var dia=document.getElementById('boardDate').value;
     if(!DAMIAN_ROWS.length){ msg.innerHTML='<span style="color:#9a7b3c">La hoja no trae citas.</span>'; renderBoard(); return; }
